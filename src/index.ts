@@ -138,6 +138,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/rerank.js')).rerankCommand(parsed);
     case 'guard':
       return (await import('./commands/guard.js')).guardCommand(parsed);
+    case 'mcp':
+      return (await import('./commands/mcp.js')).mcpCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
