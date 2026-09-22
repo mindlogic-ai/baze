@@ -132,6 +132,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/misc.js')).docsCommand();
     case '__update-check':
       return (await import('./commands/misc.js')).refreshUpdateMeta();
+    case 'embed':
+      return (await import('./commands/embed.js')).embedCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }

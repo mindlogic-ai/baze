@@ -1,4 +1,4 @@
-import type { Lane, ModelRow } from './types.js';
+import type { Lane, ModelRow, ModelType } from './types.js';
 
 export type Tool = 'claude' | 'codex' | 'opencode';
 
@@ -29,7 +29,11 @@ const LANE_FOR: Record<Tool, Lane[]> = {
   opencode: ['anthropic', 'responses', 'gemini', 'compat'],
 };
 
-export const chatModels = (rows: ModelRow[]): ModelRow[] => rows.filter((r) => r.type === 'llm');
+/** One catalog category. `/models` sends seven; only `llm` is launchable. */
+export const byType = (rows: ModelRow[], type: ModelType): ModelRow[] =>
+  rows.filter((r) => r.type === type);
+
+export const chatModels = (rows: ModelRow[]): ModelRow[] => byType(rows, 'llm');
 
 export const byLane = (rows: ModelRow[], lane: Lane): ModelRow[] =>
   chatModels(rows).filter((r) => r.lane === lane);
