@@ -16,7 +16,7 @@ function checkNode(): void {
   process.exit(1);
 }
 
-const HELP = `baze - run your coding agent through the FactChat gateway. (v${VERSION})
+const HELP = `baze - run your coding agent through the Baze gateway. (v${VERSION})
 
   baze login                 store and validate an API key (AWS and NCP alike)
   baze auth                  which key and host are in effect
@@ -25,7 +25,7 @@ const HELP = `baze - run your coding agent through the FactChat gateway. (v${VER
   baze rerank <query> [doc...]
                              order documents by relevance to a query
   baze guard [text...]       find or mask personal data in text
-  baze mcp [list|tools|call] the FactChat MCP suites (DART, KRX, ...) through the gateway
+  baze mcp [list|tools|call] the Baze MCP suites (DART, KRX, ...) through the gateway
   baze credits               remaining credit balance
   baze usage                 spend, by model, key or day
   baze claude | codex | opencode
@@ -53,7 +53,7 @@ Environment
 const USAGE: Record<string, string> = {
   login: `baze login [--with-key] [--host <url>]
   Paste a key (echo off) or pipe one with --with-key. The key says which
-  FactChat it belongs to, so AWS and NCP users run the same command; it is
+  Baze it belongs to, so AWS and NCP users run the same command; it is
   checked before it is saved to ~/.baze/credentials.json (0600). --host is only
   for an on-premise server.`,
   logout: `baze logout [--revoke]
@@ -78,7 +78,7 @@ const USAGE: Record<string, string> = {
   characters, billed per item. Text only - image screening is not served here.
   Without --categories, every category the masking server accepts.`,
   mcp: `baze mcp [list] | baze mcp tools <suite> | baze mcp call <suite> <tool> ['{json}'] [--json]
-  The FactChat first-party MCP suites (DART, KRX, Naver, ...). Listing and
+  The Baze first-party MCP suites (DART, KRX, Naver, ...). Listing and
   tools are free; each call is billed as one tool call. Arguments are one JSON
   object, from the argument or stdin. The suites are not injected into the
   launchers; configure a harness with the URL this prints if you want one there.`,
@@ -93,7 +93,7 @@ const USAGE: Record<string, string> = {
   Run Codex through the gateway on the Responses API. GPT models only. Every
   other argument, --help and --json included, goes to codex unchanged.`,
   opencode: `baze opencode [--model ID] [--dry-run] [<opencode args>]
-  Run OpenCode with four FactChat providers - the only harness that reaches every
+  Run OpenCode with four Baze providers - the only harness that reaches every
   model. Every other argument, --help included, goes to opencode unchanged.`,
   setup: `baze setup <claude|codex|opencode> [--model ID] [--dry-run]
   Write the configuration permanently. The old file is backed up first.`,

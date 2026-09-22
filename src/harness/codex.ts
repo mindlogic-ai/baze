@@ -14,7 +14,7 @@ const toml = (value: string): string => JSON.stringify(value);
 export function codexOverrides(o: HarnessOptions): string[] {
   const overrides = [
     `model_provider=${toml(CODEX_PROVIDER_ID)}`,
-    `model_providers.${CODEX_PROVIDER_ID}.name=${toml('FactChat')}`,
+    `model_providers.${CODEX_PROVIDER_ID}.name=${toml('Baze')}`,
     `model_providers.${CODEX_PROVIDER_ID}.base_url=${toml(gatewayBase(o.apiBase))}`,
     `model_providers.${CODEX_PROVIDER_ID}.env_key=${toml(ENV_KEY_NAME)}`,
     `model_providers.${CODEX_PROVIDER_ID}.wire_api=${toml('responses')}`,

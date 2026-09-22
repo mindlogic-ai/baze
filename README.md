@@ -1,6 +1,6 @@
 # baze
 
-Run Claude Code, Codex and OpenCode through the FactChat gateway with one API key, and read models, credits and usage from a shell.
+Run Claude Code, Codex and OpenCode through the Baze gateway with one API key, and read models, credits and usage from a shell.
 
 ## Install
 
@@ -25,9 +25,9 @@ Node 20.10 or newer. No runtime dependencies.
 baze login
 ```
 
-Paste the key from your FactChat API keys page. Echo is off. The key names the FactChat it belongs to, so AWS and NCP users run the same command; it is checked against the server before it is saved to `~/.baze/credentials.json` (mode 0600).
+Paste the key from your Baze API keys page. Echo is off. The key names the Baze it belongs to, so AWS and NCP users run the same command; it is checked against the server before it is saved to `~/.baze/credentials.json` (mode 0600).
 
-For CI, containers, or an older key that does not name its deployment, pipe the key and say which FactChat it belongs to:
+For CI, containers, or an older key that does not name its deployment, pipe the key and say which Baze it belongs to:
 
 ```bash
 printf %s "$KEY" | baze login --with-key --host aws
@@ -87,7 +87,7 @@ baze setup opencode
 | `baze embed [text...]` | embedding vectors, billed per token |
 | `baze rerank <query> [doc...]` | order documents by relevance to a query |
 | `baze guard [text...]` | find or mask personal data in text |
-| `baze mcp [list] \| tools <suite> \| call <suite> <tool> ['{json}']` | the FactChat first-party MCP suites |
+| `baze mcp [list] \| tools <suite> \| call <suite> <tool> ['{json}']` | the Baze first-party MCP suites |
 | `baze credits` | monthly, purchased and org-granted balances |
 | `baze usage [--from] [--to] [--by model\|key\|day] [--scope key\|member]` | gateway spend, Korea time, at most 92 days |
 | `baze claude \| codex \| opencode [--model ID] [--dry-run]` | run that tool through the gateway |
@@ -118,7 +118,7 @@ Launchers do not take the global flags. On `baze claude`, `baze codex` and `baze
 
 ## If your organization filters API traffic
 
-A FactChat admin can screen API requests for personal data and restricted words (the same
+A Baze admin can screen API requests for personal data and restricted words (the same
 filter the chat app has). With **blocking** on, any turn whose text carries a phone number,
 an ID, or a listed word is refused with `400 Request blocked by content policy` - and coding
 agents send code, logs and git history, so it will happen. `baze login` and `baze doctor`

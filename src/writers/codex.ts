@@ -41,7 +41,7 @@ export function upsertCodexConfig(text: string, o: { model: string; apiBase: str
 
   const block = [
     `[model_providers.${CODEX_PROVIDER_ID}]`,
-    'name = "FactChat"',
+    'name = "Baze"',
     `base_url = "${gatewayBase(o.apiBase)}"`,
     `env_key = "${ENV_KEY_NAME}"`,
     'wire_api = "responses"',

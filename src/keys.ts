@@ -55,10 +55,10 @@ export function inspectKey(key: string): KeyInfo {
     return { kind: 'tagged', deployment };
   }
   if (LEGACY.test(key)) return { kind: 'legacy' };
-  throw new CliError('That is not a FactChat key.', {
+  throw new CliError('That is not a Baze key.', {
     hint: key.startsWith('baze_')
       ? 'It is the wrong length - copy it again from the API keys page.'
-      : 'FactChat keys start with `baze_` (older keys are 32 letters and digits).',
+      : 'Baze keys start with `baze_` (older keys are 32 letters and digits).',
   });
 }
 

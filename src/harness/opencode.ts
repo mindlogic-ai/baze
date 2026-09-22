@@ -12,10 +12,10 @@ import type { HarnessOptions } from './claude.js';
  * prompt caching and cost about 7x.
  */
 export const OPENCODE_PROVIDERS: Record<Lane, { id: string; npm: string; name: string; path: string }> = {
-  anthropic: { id: 'factchat-claude', npm: '@ai-sdk/anthropic', name: 'FactChat (Claude, native)', path: '/claude/v1' },
-  responses: { id: 'factchat-openai', npm: '@ai-sdk/openai', name: 'FactChat (GPT, Responses)', path: '' },
-  gemini: { id: 'factchat-gemini', npm: '@ai-sdk/google', name: 'FactChat (Gemini, native)', path: '/gemini/v1beta' },
-  compat: { id: 'factchat', npm: '@ai-sdk/openai-compatible', name: 'FactChat (other models)', path: '' },
+  anthropic: { id: 'baze-claude', npm: '@ai-sdk/anthropic', name: 'Baze (Claude, native)', path: '/claude/v1' },
+  responses: { id: 'baze-openai', npm: '@ai-sdk/openai', name: 'Baze (GPT, Responses)', path: '' },
+  gemini: { id: 'baze-gemini', npm: '@ai-sdk/google', name: 'Baze (Gemini, native)', path: '/gemini/v1beta' },
+  compat: { id: 'baze', npm: '@ai-sdk/openai-compatible', name: 'Baze (other models)', path: '' },
 };
 
 const LANES: Lane[] = ['anthropic', 'responses', 'gemini', 'compat'];
@@ -121,7 +121,7 @@ export function buildOpencodePlan(o: HarnessOptions): LaunchPlan {
   const providers = Object.values(config.provider);
   const count = providers.reduce((n, p) => n + Object.keys(p.models).length, 0);
   const notes = [
-    `OpenCode -> ${providers.length} FactChat providers, ${count} models${o.model ? ` · default ${o.model}` : ''}`,
+    `OpenCode -> ${providers.length} Baze providers, ${count} models${o.model ? ` · default ${o.model}` : ''}`,
     'Nothing was written to disk; your opencode.json is untouched.',
   ];
   if (o.catalogLive === false && o.model && !FALLBACK_ROWS.some((r) => r.id === o.model)) {

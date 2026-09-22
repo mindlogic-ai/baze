@@ -30,8 +30,8 @@ export async function loginCommand(parsed: Parsed): Promise<number> {
       hint: 'Pipe the key in: `printf %s "$KEY" | baze login --with-key`.',
     });
   } else {
-    say(c.bold('Log in to FactChat.'));
-    say('Create or copy a key on the API keys page of your FactChat console, then paste it here.');
+    say(c.bold('Log in to Baze.'));
+    say('Create or copy a key on the API keys page of your Baze console, then paste it here.');
     say('');
     key = await readSecret('API key: ');
   }
@@ -55,11 +55,11 @@ export async function loginCommand(parsed: Parsed): Promise<number> {
     host = tagHost;
     catalog = await fetchCatalogDetail(key, { force: true, base: host });
   } else if (shape.kind === 'tagged') {
-    throw new CliError('This key belongs to an on-premise FactChat.', {
-      hint: 'Pass that server: `baze login --host https://<your FactChat server>`.',
+    throw new CliError('This key belongs to an on-premise Baze.', {
+      hint: 'Pass that server: `baze login --host https://<your Baze server>`.',
     });
   } else {
-    info('Checking which FactChat host this key belongs to...');
+    info('Checking which Baze host this key belongs to...');
     const found = await detectHost(hostOrder(loadStoredCredentials()?.host), (h) =>
       fetchCatalogDetail(key, { force: true, base: h }),
     );

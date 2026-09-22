@@ -32,7 +32,7 @@ function messageFor(status: number, body: GatewayErrorBody | undefined): string 
   if (status === 403) return server ?? 'This key is not allowed to do that.';
   if (status === 404) return server ?? 'No such model or endpoint for this key.';
   if (status === 429) return server ?? 'Rate limit reached.';
-  if (status === 503) return server ?? 'FactChat is in maintenance.';
+  if (status === 503) return server ?? 'Baze is in maintenance.';
   return server ?? `Gateway returned HTTP ${status}.`;
 }
 
@@ -234,7 +234,7 @@ export function contentFilterWarning(cf: ContentFilter | undefined): string | un
       .join(' or ');
     return (
       `Your organization refuses API requests that contain ${what}. Coding agents send code, logs and git history, ` +
-      'so some turns will fail with "Request blocked by content policy". Ask your FactChat admin to mask instead of block, or to exempt the API.'
+      'so some turns will fail with "Request blocked by content policy". Ask your Baze admin to mask instead of block, or to exempt the API.'
     );
   }
   if (cf.masksPersonalInfo) {

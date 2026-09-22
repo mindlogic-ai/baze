@@ -22,5 +22,5 @@ test('a mistyped tagged key fails offline, before it reaches any host', () => {
 test('an old untagged key is legacy and has no host of its own; on-premise needs --host', () => {
   assert.deepEqual(inspectKey('A'.repeat(32)), { kind: 'legacy' });
   assert.equal(hostForKey('A'.repeat(32)), undefined);
-  assert.throws(() => inspectKey('sk-ant-not-ours'), /not a FactChat key/i);
+  assert.throws(() => inspectKey('sk-ant-not-ours'), /not a Baze key/i);
 });

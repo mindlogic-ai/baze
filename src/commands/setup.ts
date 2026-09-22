@@ -41,7 +41,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
     }
     const bak = backup(path);
     writeText(path, text);
-    ok(`Wrote the FactChat env block into ${path}.${bak ? ` (backup: ${bak})` : ''}`);
+    ok(`Wrote the Baze env block into ${path}.${bak ? ` (backup: ${bak})` : ''}`);
     warn('This file now holds your API key in plain text. It is the user-level settings file, not a project one, so it will not be committed - but on a shared machine prefer `baze claude`.');
     info('A plain `claude` now goes through the gateway. To undo, restore the backup.');
     return 0;
@@ -57,7 +57,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
     }
     const bak = backup(path);
     writeText(path, text);
-    ok(`Added the FactChat provider to ${path} and set the default model to ${model}.${bak ? ` (backup: ${bak})` : ''}`);
+    ok(`Added the Baze provider to ${path} and set the default model to ${model}.${bak ? ` (backup: ${bak})` : ''}`);
     printEnvHint();
     return 0;
   }
@@ -90,7 +90,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
   }
   const bak = backup(path);
   writeText(path, text);
-  ok(`Added ${Object.keys(generated.provider).length} FactChat providers to ${path}, default model ${model}.${bak ? ` (backup: ${bak})` : ''}`);
+  ok(`Added ${Object.keys(generated.provider).length} Baze providers to ${path}, default model ${model}.${bak ? ` (backup: ${bak})` : ''}`);
   printEnvHint();
   return 0;
 }

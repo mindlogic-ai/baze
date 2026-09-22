@@ -16,7 +16,7 @@ export function hostOrder(preferred: string | undefined): string[] {
 
 /**
  * Only for old untagged keys: a tagged key names its own deployment. A
- * FactChat key belongs to exactly one deployment, and NCP tenants have called
+ * Baze key belongs to exactly one deployment, and NCP tenants have called
  * AWS by mistake (C13).
  *
  * The probe moves to the next host only when the answer proves the key is not
@@ -53,7 +53,7 @@ export async function detectHost<T>(
       hint: 'Check the network, or pass --host aws|ncp as shown on the API keys page.',
     });
   }
-  throw new CliError('That key was not accepted by any FactChat host.', {
+  throw new CliError('That key was not accepted by any Baze host.', {
     hint: `Checked ${hosts.join(' and ')}. Copy the key again from the API keys page, or pass --host <url> for your own deployment.`,
   });
 }
