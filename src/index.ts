@@ -126,6 +126,12 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/doctor.js')).doctorCommand(parsed);
     case 'setup':
       return (await import('./commands/setup.js')).setupCommand(parsed);
+    case 'update':
+      return (await import('./commands/misc.js')).updateCommand();
+    case 'docs':
+      return (await import('./commands/misc.js')).docsCommand();
+    case '__update-check':
+      return (await import('./commands/misc.js')).refreshUpdateMeta();
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
@@ -162,7 +168,16 @@ async function main(argv: string[]): Promise<number> {
   const apiBaseFlag = parsed.flags.get('api-base');
   if (typeof apiBaseFlag === 'string') process.env.BAZE_API_BASE = apiBaseFlag;
 
-  return dispatch(parsed);
+  const code = await dispatch(parsed);
+  // After the command, never before, and only for a person at a terminal.
+  // `env` output is eval'd, and the hidden check must not recurse.
+  const quietCommand = parsed.command === 'env' || parsed.command === '__update-check';
+  if (!quietCommand && process.stderr.isTTY) {
+    const misc = await import('./commands/misc.js');
+    misc.printCachedNudge(VERSION);
+    misc.refreshInBackground();
+  }
+  return code;
 }
 
 // A reader that stops early (`baze models --json | head`) closes the pipe;

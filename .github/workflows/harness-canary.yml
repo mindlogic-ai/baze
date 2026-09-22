@@ -1,0 +1,29 @@
+name: harness-canary
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'      # Mondays 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launchers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      - run: npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
+      - name: Each tool accepts the arguments baze passes it
+        env:
+          BAZE_API_KEY: canary-not-a-real-key
+          BAZE_API_BASE: http://127.0.0.1:9    # nothing listens; the built-in model list is used
+        run: |
+          node dist/index.js claude --version
+          node dist/index.js codex --version
+          node dist/index.js opencode --version

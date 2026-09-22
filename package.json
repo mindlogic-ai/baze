@@ -24,7 +24,7 @@
     "@types/node": "24.2.0"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.json && chmod +x dist/index.js",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/stamp-version.mjs && chmod +x dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "rm -rf .build && tsc -p tsconfig.test.json && node scripts/run-tests.mjs"
   }
