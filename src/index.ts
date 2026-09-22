@@ -112,6 +112,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/login.js')).authCommand();
     case 'env':
       return (await import('./commands/login.js')).envCommand();
+    case 'models':
+      return (await import('./commands/models.js')).modelsCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
