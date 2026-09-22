@@ -116,6 +116,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/models.js')).modelsCommand(parsed);
     case 'credits':
       return (await import('./commands/credits.js')).creditsCommand(parsed);
+    case 'usage':
+      return (await import('./commands/usage.js')).usageCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
