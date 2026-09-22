@@ -122,6 +122,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
     case 'codex':
     case 'opencode':
       return (await import('./commands/run.js')).runCommand(parsed.command, parsed);
+    case 'doctor':
+      return (await import('./commands/doctor.js')).doctorCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
