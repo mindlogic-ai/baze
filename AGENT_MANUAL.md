@@ -149,12 +149,10 @@ baze help <command>
 
 ### Organization content filter
 
-`GET /v1/gateway/models/` carries `content_filter` `{enabled, blocks_personal_info,
-masks_personal_info, restricted_words}` (all false when `enabled` is false; absent on an older
-gateway). `baze login` and `baze doctor` print one stderr warning when it is on. A blocked
-request is a `400` whose message starts with `Request blocked by content policy`; it arrives
-inside the harness, not from baze. Nothing in baze can lift it - it is the organization's
-policy - so do not retry the turn, tell the user what the message means.
+A `400` whose message starts with `Request blocked by content policy` means the organization
+screens API requests for personal data or restricted words and refused this one. It arrives
+inside the harness, not from baze, and baze cannot lift it. Do not retry the turn; tell the
+user what the message says (ask the admin to mask instead of block, or to exempt the API).
 
 ## Environment
 

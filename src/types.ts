@@ -34,20 +34,6 @@ export interface ModelRow {
   pricing: ModelPricing | null;
 }
 
-/**
- * The organization's content-safety opt-in for API traffic, as `/models`
- * publishes it (`content_filter`). Every flag is false when `enabled` is.
- */
-export interface ContentFilter {
-  enabled: boolean;
-  /** Requests carrying personal data (phone numbers, IDs, ...) are refused with a 400. */
-  blocksPersonalInfo: boolean;
-  /** Personal data is rewritten before the model sees it; the request proceeds. */
-  masksPersonalInfo: boolean;
-  /** A word list the organization refuses outright. */
-  restrictedWords: boolean;
-}
-
 export interface LaunchPlan {
   bin: string;
   args: string[];
