@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { apiBase, cacheDir, ensureCacheDir } from './config.js';
 import { gatewayBase } from './hosts.js';
-import type { Lane, ModelRow, ModelType } from './types.js';
+import type { ContentFilter, Lane, ModelRow, ModelType } from './types.js';
 import { CliError } from './ui.js';
 
 const CATALOG_TTL_MS = 10 * 60 * 1000;
@@ -200,6 +200,47 @@ export interface Catalog {
   rows: ModelRow[];
   /** Absent on a gateway older than revision 9. */
   contract?: number;
+  /** Absent on a gateway that does not publish `content_filter`. */
+  contentFilter?: ContentFilter;
+}
+
+interface RawContentFilter {
+  enabled?: boolean;
+  blocks_personal_info?: boolean;
+  masks_personal_info?: boolean;
+  restricted_words?: boolean;
+}
+
+function toContentFilter(raw: RawContentFilter): ContentFilter {
+  return {
+    enabled: raw.enabled === true,
+    blocksPersonalInfo: raw.blocks_personal_info === true,
+    masksPersonalInfo: raw.masks_personal_info === true,
+    restrictedWords: raw.restricted_words === true,
+  };
+}
+
+/**
+ * One sentence for `baze login` / `baze doctor` when the organization screens
+ * API traffic. A coding agent ships code, logs and git history, so a block on
+ * personal data fires sooner or later - and the 400 lands inside the agent's
+ * own output with nothing to say where it came from.
+ */
+export function contentFilterWarning(cf: ContentFilter | undefined): string | undefined {
+  if (!cf?.enabled) return undefined;
+  if (cf.blocksPersonalInfo || cf.restrictedWords) {
+    const what = [cf.blocksPersonalInfo && 'personal data (phone numbers, IDs, ...)', cf.restrictedWords && 'restricted words']
+      .filter(Boolean)
+      .join(' or ');
+    return (
+      `Your organization refuses API requests that contain ${what}. Coding agents send code, logs and git history, ` +
+      'so some turns will fail with "Request blocked by content policy". Ask your FactChat admin to mask instead of block, or to exempt the API.'
+    );
+  }
+  if (cf.masksPersonalInfo) {
+    return 'Your organization masks personal data in API requests: a phone number or ID in your code reaches the model rewritten.';
+  }
+  return 'Your organization screens API requests (content filter on).';
 }
 
 export async function fetchCatalogDetail(
@@ -211,19 +252,29 @@ export async function fetchCatalogDetail(
   const file = catalogCachePath(base, apiKey);
   if (!opts.force && existsSync(file)) {
     try {
-      const cached = JSON.parse(readFileSync(file, 'utf8')) as { at: number; rows: ModelRow[]; contract?: number };
-      if (Date.now() - cached.at < CATALOG_TTL_MS) return { rows: cached.rows, contract: cached.contract };
+      const cached = JSON.parse(readFileSync(file, 'utf8')) as {
+        at: number;
+        rows: ModelRow[];
+        contract?: number;
+        contentFilter?: ContentFilter;
+      };
+      if (Date.now() - cached.at < CATALOG_TTL_MS) {
+        return { rows: cached.rows, contract: cached.contract, contentFilter: cached.contentFilter };
+      }
     } catch {
       // fall through and refetch
     }
   }
-  const body = await gatewayFetch<{ data: RawModel[]; cli_contract?: number }>('/models/', {
+  const body = await gatewayFetch<{ data: RawModel[]; cli_contract?: number; content_filter?: RawContentFilter }>('/models/', {
     apiKey,
     base,
     fetchImpl: opts.fetchImpl,
   });
   const catalog: Catalog = { rows: body.data.map(toRow) };
   if (typeof body.cli_contract === 'number') catalog.contract = body.cli_contract;
+  if (body.content_filter && typeof body.content_filter === 'object') {
+    catalog.contentFilter = toContentFilter(body.content_filter);
+  }
   try {
     writeFileSync(file, JSON.stringify({ at: Date.now(), ...catalog }), { mode: 0o600 });
   } catch {

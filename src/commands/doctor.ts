@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Parsed } from '../args.js';
-import { CLI_CONTRACT, fetchCatalogDetail } from '../api.js';
+import { CLI_CONTRACT, contentFilterWarning, fetchCatalogDetail } from '../api.js';
 import { apiBase, loadStoredCredentials, resolveCredential } from '../config.js';
 import { claudeEnv } from '../harness/claude.js';
 import { c, fail, info, maskKey, ok, say, warn } from '../ui.js';
@@ -80,6 +80,9 @@ export async function doctorCommand(_parsed: Parsed): Promise<number> {
     try {
       const catalog = await fetchCatalogDetail(cred.apiKey, { force: true, base });
       ok(`Key ${maskKey(cred.apiKey)} (${cred.source}) works on ${base} - ${catalog.rows.filter((r) => r.type === 'llm').length} chat models.`);
+      // The organization's policy, not a broken install - reported, not counted.
+      const policy = contentFilterWarning(catalog.contentFilter);
+      if (policy) warn(policy);
       const drift = contractDrift(catalog.contract);
       if (drift) {
         warn(drift);

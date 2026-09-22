@@ -116,6 +116,16 @@ Launchers do not take the global flags. On `baze claude`, `baze codex` and `baze
 | `BAZE_API_BASE` | beats the stored host |
 | `BAZE_CONFIG_DIR` | config directory (default `~/.baze`) |
 
+## If your organization filters API traffic
+
+A FactChat admin can screen API requests for personal data and restricted words (the same
+filter the chat app has). With **blocking** on, any turn whose text carries a phone number,
+an ID, or a listed word is refused with `400 Request blocked by content policy` - and coding
+agents send code, logs and git history, so it will happen. `baze login` and `baze doctor`
+warn when the key's organization has this on. The fix is on the admin side: switch the API
+filter to masking, or exempt the API. With **masking** on, requests go through, but personal
+data in what the agent sent reaches the model rewritten.
+
 ## Output and exit codes
 
 stdout is data and stderr is prose, so `baze models --json | jq` and `eval "$(baze env)"` are safe. Exit codes: `0` ok, `1` error, `2` out of credit, `127` the tool is not installed. A launcher exits with the tool's own code.

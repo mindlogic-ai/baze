@@ -1,5 +1,5 @@
 import type { Parsed } from '../args.js';
-import { fetchCatalog, gatewayFetch } from '../api.js';
+import { type Catalog, contentFilterWarning, fetchCatalogDetail, gatewayFetch } from '../api.js';
 import {
   apiBase,
   clearCredentials,
@@ -13,7 +13,6 @@ import {
 import { detectHost, hostOrder, HOSTS } from '../hosts.js';
 import { hostForKey, inspectKey } from '../keys.js';
 import { readSecret, readSecretFrom } from '../prompt.js';
-import type { ModelRow } from '../types.js';
 import { c, CliError, info, maskKey, ok, out, say, warn } from '../ui.js';
 
 export async function loginCommand(parsed: Parsed): Promise<number> {
@@ -44,17 +43,17 @@ export async function loginCommand(parsed: Parsed): Promise<number> {
   // turns every later command into a confusing 401. The validating call is the
   // catalog fetch itself, so a login makes exactly one request for a tagged key.
   let host: string;
-  let rows: ModelRow[];
+  let catalog: Catalog;
   const tagHost = hostForKey(key);
   // An explicit base (--host, --api-base or BAZE_API_BASE) always wins - that
   // is how a local or staging server is reached with a production-tagged key.
   const explicit = typeof hostFlag === 'string' ? hostFlag : process.env[ENV_BASE_NAME];
   if (explicit) {
     host = HOSTS[explicit as keyof typeof HOSTS] ?? explicit.replace(/\/+$/, '');
-    rows = await fetchCatalog(key, { force: true, base: host });
+    catalog = await fetchCatalogDetail(key, { force: true, base: host });
   } else if (tagHost) {
     host = tagHost;
-    rows = await fetchCatalog(key, { force: true, base: host });
+    catalog = await fetchCatalogDetail(key, { force: true, base: host });
   } else if (shape.kind === 'tagged') {
     throw new CliError('This key belongs to an on-premise FactChat.', {
       hint: 'Pass that server: `baze login --host https://<your FactChat server>`.',
@@ -62,17 +61,19 @@ export async function loginCommand(parsed: Parsed): Promise<number> {
   } else {
     info('Checking which FactChat host this key belongs to...');
     const found = await detectHost(hostOrder(loadStoredCredentials()?.host), (h) =>
-      fetchCatalog(key, { force: true, base: h }),
+      fetchCatalogDetail(key, { force: true, base: h }),
     );
     host = found.host;
-    rows = found.value;
+    catalog = found.value;
   }
 
   const path = saveCredentials({ api_key: key, host });
 
   ok(`Key accepted (${maskKey(key)}) on ${host}.`);
   ok(`Saved to ${path}, mode 0600.`);
-  ok(`${rows.filter((r) => r.type === 'llm').length} chat models are available to this key.`);
+  ok(`${catalog.rows.filter((r) => r.type === 'llm').length} chat models are available to this key.`);
+  const policy = contentFilterWarning(catalog.contentFilter);
+  if (policy) warn(policy);
   info('');
   info('Next:');
   info('  baze claude     Claude Code through the gateway');
