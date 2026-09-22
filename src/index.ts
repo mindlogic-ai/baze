@@ -104,6 +104,14 @@ const USAGE: Record<string, string> = {
 
 async function dispatch(parsed: Parsed): Promise<number> {
   switch (parsed.command) {
+    case 'login':
+      return (await import('./commands/login.js')).loginCommand(parsed);
+    case 'logout':
+      return (await import('./commands/login.js')).logoutCommand(parsed);
+    case 'auth':
+      return (await import('./commands/login.js')).authCommand();
+    case 'env':
+      return (await import('./commands/login.js')).envCommand();
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
