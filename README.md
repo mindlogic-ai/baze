@@ -65,6 +65,31 @@ baze claude --dry-run          # print the plan, start nothing
 
 `baze models` shows the lane of every model. `--model` accepts a full id or a unique prefix.
 
+## Generate images, video, speech and music
+
+```bash
+baze models --type image                       # what this key can call
+baze gen image "a poster for a jazz night" --model gpt-image-1 --set quality=high
+baze gen image "make it blue" --model gpt-image-1 --image poster.png -o blue.png
+baze gen video "the camera slowly circles" --model bytedance/seedance-1-pro --image blue.png --set duration=5
+baze gen speech "안녕하세요" -o hello.wav
+baze gen music "short upbeat synth jingle" --model lyria-3-clip-preview
+baze gen transcribe meeting.m4a --lang ko,en > meeting.txt
+baze gen video --model bytedance/seedance-1-pro --params    # what --set takes
+```
+
+Results land in the current directory and their paths are printed, so the next command (or your coding agent) can use them directly. `--set` is checked against the model before anything is sent. A video is waited for; if you stop it, `baze gen wait <id>` picks it up again, and `baze history` lists every call with its files.
+
+## Talk to a studio chatbot
+
+```bash
+baze bot ask 3840 "연차 이월 규정 알려줘"
+baze bot ask 3840 "그럼 신입은?" --continue
+baze bot chat 3840
+```
+
+The chatbot answers from its own knowledge and workflow, as it does in the studio. Its owner has to turn on API access.
+
 ## Make it permanent
 
 ```bash
@@ -88,6 +113,10 @@ baze setup opencode
 | `baze rerank <query> [doc...]` | order documents by relevance to a query |
 | `baze guard [text...]` | find or mask personal data in text |
 | `baze mcp [list] \| tools <suite> \| call <suite> <tool> ['{json}']` | the Baze first-party MCP suites |
+| `baze gen image\|video\|speech\|music\|transcribe` | generate media; results are saved as files in the current directory |
+| `baze gen wait <id>` | collect a job started with `--no-wait` or interrupted |
+| `baze bot ask\|chat <chatbot id>` | talk to a studio chatbot, with its knowledge, workflow and tools |
+| `baze history` | every generation and bot call from this machine |
 | `baze credits` | monthly, purchased and org-granted balances |
 | `baze usage [--from] [--to] [--by model\|key\|day] [--scope key\|member]` | gateway spend, Korea time, at most 92 days |
 | `baze claude \| codex \| opencode [--model ID] [--dry-run]` | run that tool through the gateway |
@@ -126,6 +155,10 @@ lifts it: ask the admin to switch the API filter to masking, or to exempt the AP
 ## Output and exit codes
 
 stdout is data and stderr is prose, so `baze models --json | jq` and `eval "$(baze env)"` are safe. Exit codes: `0` ok, `1` error, `2` out of credit, `127` the tool is not installed. A launcher exits with the tool's own code.
+
+## For coding agents
+
+`skills/baze/SKILL.md` is an agent skill for `baze gen` and `baze bot`, released with the CLI so it never describes a flag this version does not have. Copy the folder into your agent's skills directory (Claude Code: `~/.claude/skills/`). The full machine contract is `baze docs`.
 
 ## Contributing
 

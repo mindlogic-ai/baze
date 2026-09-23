@@ -49,27 +49,41 @@ export interface RawReply {
   status: number;
   contentType: string;
   text: string;
+  /** The gateway's X-Request-ID; absent on a gateway that does not send it yet. */
+  requestId?: string;
 }
 
+export interface BytesReply {
+  status: number;
+  contentType: string;
+  bytes: Buffer;
+  requestId?: string;
+  headers: Headers;
+}
+
+interface RequestOpts {
+  apiKey: string;
+  base?: string;
+  method?: string;
+  body?: unknown;
+  /** Multipart upload; the runtime sets the boundary, so no content-type here. */
+  form?: FormData;
+  headers?: Record<string, string>;
+  fetchImpl?: typeof fetch;
+}
+
+const requestIdOf = (res: Response): string | undefined => res.headers.get('x-request-id') ?? undefined;
+
 /**
- * The authed request with the gateway's error mapping and no parsing of a
- * successful body. `gatewayFetch` is this plus JSON; the MCP relay (Task 19)
- * needs the text itself, because the suites answer as an SSE stream.
+ * The authed request and the gateway's error mapping, before any reading of a
+ * successful body. Every error carries the request id when the gateway sent one.
  */
-export async function gatewayFetchRaw(
-  path: string,
-  opts: {
-    apiKey: string;
-    base?: string;
-    method?: string;
-    body?: unknown;
-    headers?: Record<string, string>;
-    fetchImpl?: typeof fetch;
-  },
-): Promise<RawReply> {
+async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response> {
   const doFetch = opts.fetchImpl ?? fetch;
   const base = opts.base ?? apiBase();
-  const url = `${gatewayBase(base)}${path}`;
+  // An absolute gateway path (a download link the gateway itself handed out)
+  // goes to the same host; anything else is under /v1/gateway.
+  const url = path.startsWith('/v1/') ? `${base.replace(/\/+$/, '')}${path}` : `${gatewayBase(base)}${path}`;
   let res: Response;
   try {
     res = await doFetch(url, {
@@ -79,6 +93,7 @@ export async function gatewayFetchRaw(
         ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(opts.headers ?? {}),
       },
+      ...(opts.form !== undefined ? { body: opts.form } : {}),
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
     });
   } catch {
@@ -87,9 +102,8 @@ export async function gatewayFetchRaw(
       hint: 'Check the network, or the host in --api-base / BAZE_API_BASE.',
     });
   }
-
-  const text = await res.text();
   if (!res.ok) {
+    const text = await res.text();
     let parsed: GatewayErrorBody | undefined;
     try {
       parsed = text ? (JSON.parse(text) as GatewayErrorBody) : undefined;
@@ -100,20 +114,71 @@ export async function gatewayFetchRaw(
       hint: hintFor(res.status),
       exitCode: res.status === 402 ? 2 : 1,
       status: res.status,
+      requestId: requestIdOf(res),
     });
   }
-  return { status: res.status, contentType: res.headers.get('content-type') ?? '', text };
+  return res;
 }
 
-export async function gatewayFetch<T>(
-  path: string,
-  opts: { apiKey: string; base?: string; method?: string; body?: unknown; fetchImpl?: typeof fetch },
-): Promise<T> {
-  const { text } = await gatewayFetchRaw(path, opts);
+/** A successful binary body (audio, a proxied video) with its headers. */
+export async function gatewayFetchBytes(path: string, opts: RequestOpts): Promise<BytesReply> {
+  const res = await gatewayRequest(path, opts);
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type') ?? '',
+    bytes: Buffer.from(await res.arrayBuffer()),
+    requestId: requestIdOf(res),
+    headers: res.headers,
+  };
+}
+
+/**
+ * A result file at a provider URL the gateway returned. No key goes with it:
+ * these are third-party hosts, and a signed URL carries its own credential.
+ */
+export async function downloadPublic(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ bytes: Buffer; contentType: string }> {
+  let res: Response;
   try {
-    return (text ? JSON.parse(text) : undefined) as T;
+    res = await fetchImpl(url);
   } catch {
-    return undefined as T;
+    throw new CliError(`Could not download ${new URL(url).host}.`, { hint: 'Check the network and retry.' });
+  }
+  if (!res.ok) throw new CliError(`Download failed: ${new URL(url).host} answered HTTP ${res.status}.`);
+  return { bytes: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get('content-type') ?? '' };
+}
+
+/**
+ * The authed request with the gateway's error mapping and no parsing of a
+ * successful body. `gatewayFetch` is this plus JSON; the MCP relay (Task 19)
+ * needs the text itself, because the suites answer as an SSE stream.
+ */
+export async function gatewayFetchRaw(path: string, opts: RequestOpts): Promise<RawReply> {
+  const res = await gatewayRequest(path, opts);
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type') ?? '',
+    text: await res.text(),
+    requestId: requestIdOf(res),
+  };
+}
+
+export async function gatewayFetch<T>(path: string, opts: RequestOpts): Promise<T> {
+  return (await gatewayFetchJson<T>(path, opts)).body;
+}
+
+/** JSON plus the request id, for commands that record or print it. */
+export async function gatewayFetchJson<T>(
+  path: string,
+  opts: RequestOpts,
+): Promise<{ body: T; requestId?: string }> {
+  const { text, requestId } = await gatewayFetchRaw(path, opts);
+  try {
+    return { body: (text ? JSON.parse(text) : undefined) as T, requestId };
+  } catch {
+    return { body: undefined as T, requestId };
   }
 }
 
@@ -124,6 +189,7 @@ interface RawModel {
   endpoints?: string[] | null;
   context_limit?: number | null;
   max_output_tokens?: number | null;
+  audio_client?: string | null;
   /** USD per 1M tokens. Null for a model with no price row; each key optional. */
   pricing?: {
     input?: number | null;
@@ -166,6 +232,7 @@ function toRow(raw: RawModel): ModelRow {
     lane: laneFor(raw.endpoints),
     contextLimit: raw.context_limit ?? null,
     maxOutputTokens: raw.max_output_tokens ?? null,
+    ...(raw.type === 'audio' ? { audioClient: raw.audio_client ?? null } : {}),
     pricing: p
       ? {
           inputPer1mUsd: p.input ?? null,

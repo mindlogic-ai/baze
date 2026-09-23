@@ -54,3 +54,24 @@ test('an unknown command still parses --help', () => {
   const p = parseArgs(['nope', '--help'], knownFor('nope'));
   assert.equal(p.flags.get('help'), true);
 });
+
+test('an unknown flag on a non-launcher command is reported, not dropped', async () => {
+  const { claimStrayArgs } = await import('./flags.js');
+  const parsed = { command: 'embed', positionals: ['x'], passthrough: ['--dimension', '256'] };
+  assert.equal(claimStrayArgs(parsed, ['embed', 'x', '--dimension', '256']), '--dimension');
+});
+
+test('a launcher keeps its passthrough for the tool', async () => {
+  const { claimStrayArgs } = await import('./flags.js');
+  const parsed = { command: 'claude', positionals: [], passthrough: ['-p', 'hi'] };
+  assert.equal(claimStrayArgs(parsed, ['claude', '-p', 'hi']), undefined);
+  assert.deepEqual(parsed.passthrough, ['-p', 'hi']);
+});
+
+test('after an explicit -- the rest are arguments, so a prompt may start with a dash', async () => {
+  const { claimStrayArgs } = await import('./flags.js');
+  const parsed = { command: 'gen', positionals: ['image'], passthrough: ['-5 degrees at dawn'] };
+  assert.equal(claimStrayArgs(parsed, ['gen', 'image', '--', '-5 degrees at dawn']), undefined);
+  assert.deepEqual(parsed.positionals, ['image', '-5 degrees at dawn']);
+  assert.deepEqual(parsed.passthrough, []);
+});

@@ -5,6 +5,7 @@ import { parseRpcResponse, readArguments } from './mcp.js';
 const parsed = (positionals: string[]) => ({
   command: 'mcp',
   flags: new Map<string, string | true>(),
+  lists: new Map<string, string[]>(),
   positionals,
   passthrough: [],
 });

@@ -6,6 +6,8 @@ This is `baze` described for a program that drives it: exact invocations, output
 
 - **stdout is data, stderr is prose.** Every table, hint, warning and progress note goes to stderr. With `--json`, stdout holds exactly one JSON document and nothing else.
 - **Exit codes:** `0` ok · `1` error · `2` out of credit (the gateway answered 402) · `127` the tool to launch is not installed. A launcher (`claude`, `codex`, `opencode`) exits with the tool's own code.
+- **Unknown options are errors.** Every command but a launcher exits `1` on an option it does not take, instead of ignoring it. Use `--` before an argument that starts with a dash.
+- **Request ids.** When the gateway sends one, a failed call prints `request id: <uuid>` on stderr, and every `--json` result of `gen` and `bot` carries `request_id`. Quote it to support.
 - **`--no-input`** makes every command fail instead of prompting. Use it in unattended runs.
 - **`-q` / `--quiet`** drops hints and progress notes on stderr. Errors still print.
 - **`--json` shapes** are the compatibility contract of this package: a field is only ever added in a minor version; removing or renaming one is a major version.
@@ -54,7 +56,7 @@ Array of rows:
 ]
 ```
 
-`contextLimit`, `maxOutputTokens` and every pricing rate may be `null`; `pricing` itself may be `null`. Prices are USD per 1M tokens at list price. The lane decides which harness can run the model: `anthropic` → Claude Code and OpenCode; `responses` → Codex and OpenCode; `gemini` and `compat` → OpenCode only.
+`contextLimit`, `maxOutputTokens` and every pricing rate may be `null`; `audio` rows add `audioClient` (`google` text-to-speech, `google_lyria3` / `elevenlabs` music, `soniox` transcription); `pricing` itself may be `null`. Prices are USD per 1M tokens at list price. The lane decides which harness can run the model: `anthropic` → Claude Code and OpenCode; `responses` → Codex and OpenCode; `gemini` and `compat` → OpenCode only.
 
 ## Credits and usage
 
@@ -126,6 +128,70 @@ baze guard "text with a phone number" --mode mask --json   # mode mask (default)
 `rerank`: `{ "model": "…", "results": [ { "index": 0, "relevance_score": 0.9 } ], "usage": { "total_tokens": 0 } }`, best first. At most 500 documents of 32,000 characters.
 
 `guard`: `{ "mode": "mask", "flagged": true, "results": [ { "index": 0, "flagged": true, "categories": [ "…" ], "entities": [ { "category": "…", "text": "…" } ], "masked_text": "…" } ], "usage": { "requests": 1 } }`. At most 100 items of 20,000 characters, billed per item. Text only.
+
+## Generating media
+
+```bash
+baze gen image "<prompt>" --model ID [--set k=v]... [--image <file|url>]... [--n N] [-o file] --json
+baze gen video "<prompt>" --model ID [--set k=v]... [--image <file|url>] [--no-wait] [--timeout S] [-o file] --json
+baze gen speech "<text>" [--model ID] [--voice NAME] [-o file.wav] --json
+baze gen music "<prompt>" --model ID [--lyrics "..."] [--seconds N] [--instrumental] [-o file.mp3] --json
+baze gen transcribe <audio file> [--model ID] [--lang ko,en] [--no-diarize] [-o file.txt] --json
+baze gen wait <history id> --json
+baze gen <kind> --model ID --params --json      # the parameters the model takes; nothing is billed
+```
+
+Result:
+
+```json
+{
+  "kind": "image" | "video" | "speech" | "music" | "transcribe",
+  "model": "…",
+  "history_id": "8 hex chars",
+  "files": [ "/absolute/path/of/each/result" ],
+  "operation_id": "…",            // video, transcribe, async image
+  "text": "…",                    // transcribe only; also "segments": [ … ]
+  "credits": 40 | null,           // null when the gateway does not report a charge on this lane
+  "request_id": "…" | null
+}
+```
+
+- `--model` is required for image, video and music (prices differ a hundredfold between models; `baze models --type image|video|audio`). Speech and transcription default to the first model of their engine.
+- `--set` is checked against the model's published parameters before the request is sent: an unknown name or a value outside the list exits `1` with the allowed values, and nothing is billed. `--params --json` returns them: `[ { "name", "type": "enum" | "duration" | "num_images", "required", "default", "values"?, "max"? } ]`. The image count is `--n`, never `--set n=`.
+- `--image` takes a URL, or a local png/jpg/webp/gif of up to 18 MB, sent inline. Image: edit or reference. Video: the first frame.
+- Files are written to the current directory as `baze-<kind>-<local time>-<4 hex>.<ext>` unless `-o` names them; with several images, `-o out.png` becomes `out-1.png`, `out-2.png`. Speech is saved as WAV (24 kHz, 16-bit, mono).
+- A video is waited for, polling every 5 s, up to `--timeout` seconds (default 900). Killing the process does not lose the job: it was recorded before the first poll. `--no-wait` prints the history id on stdout (with `--json`: `{ "history_id", "operation_id", "status": "processing" }`) and exits `0`; `baze gen wait <id>` collects it later. A job that fails after the gateway accepted it is refunded by the gateway; the CLI exits `1` with the provider's reason.
+
+## Studio chatbots
+
+```bash
+baze bot ask <chatbot id> "<question>" [--continue] [--save] --json
+echo "<question>" | baze bot ask <chatbot id> --json
+baze bot chat <chatbot id> [--continue]          # interactive; refuses without a terminal
+```
+
+```json
+{
+  "bot": 3840,
+  "text": "…",
+  "files": [ { "filename", "mime_type", "url", "expires_in" } ],
+  "saved": [ "/absolute/path" ],
+  "credits": 18.52,
+  "request_id": "…" | null,
+  "history_id": "…",
+  "turns": 3
+}
+```
+
+The chatbot runs as it does in the studio: its prompt, knowledge, workflow and tools. The gateway keeps no conversation; `--continue` resends this machine's last conversation with that bot (`~/.baze/conversations/bot-<id>.json`), so `turns` grows and so does the cost. `--save` downloads the files the bot produced into the current directory. The chatbot needs API access turned on by its owner; the id is a number.
+
+## History
+
+```bash
+baze history [--last N] [--kind image|video|speech|music|transcribe|bot] --json
+```
+
+Newest first, one object per call: `{ "id", "at", "kind", "model", "status": "submitted" | "processing" | "completed" | "failed", "host", "prompt"?, "operation_id"?, "files"?, "credits"?, "request_id"?, "error"? }`. Kept on this machine only, in `~/.baze/history.jsonl` (0600); prompts are cut at 500 characters.
 
 ## MCP suites
 

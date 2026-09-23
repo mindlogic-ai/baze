@@ -35,6 +35,11 @@ export const info = (s: string): void => {
   if (!quiet) say(c.dim(s));
 };
 
+/** Credits as a person reads them; `--json` keeps the gateway's exact number. */
+export function formatCredits(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
 /** Never print a key in full. First 6 and last 4 only. */
 export function maskKey(key: string): string {
   if (key.length <= 12) return '*'.repeat(key.length);
@@ -46,11 +51,17 @@ export class CliError extends Error {
   readonly exitCode: number;
   /** HTTP status when the gateway answered; undefined for local and network errors. */
   readonly status?: number;
-  constructor(message: string, options: { hint?: string; exitCode?: number; status?: number } = {}) {
+  /** The gateway's X-Request-ID for the failed call - what support asks for. */
+  readonly requestId?: string;
+  constructor(
+    message: string,
+    options: { hint?: string; exitCode?: number; status?: number; requestId?: string } = {},
+  ) {
     super(message);
     this.name = 'CliError';
     this.hint = options.hint;
     this.exitCode = options.exitCode ?? 1;
     this.status = options.status;
+    this.requestId = options.requestId;
   }
 }

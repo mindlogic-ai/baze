@@ -83,3 +83,43 @@ test('the server contract version rides along with the catalog, and an older ser
   const old = await fetchCatalogDetail('k', { base: 'https://older.test', force: true, fetchImpl: older });
   assert.equal(old.contract, undefined);
 });
+
+test('a gateway error carries the request id the gateway sent', async () => {
+  const fake = (async () =>
+    new Response(JSON.stringify({ detail: { code: 404, message: 'nope' } }), {
+      status: 404,
+      headers: { 'x-request-id': 'req-123' },
+    })) as unknown as typeof fetch;
+  await assert.rejects(
+    gatewayFetch('/models/x/', { apiKey: 'k', base: 'https://a.test', fetchImpl: fake }),
+    (e: Error & { requestId?: string }) => e.requestId === 'req-123',
+  );
+});
+
+test('a /v1/ path the gateway handed out goes to the same host, not under /v1/gateway', async () => {
+  const { gatewayFetchBytes } = await import('./api.js');
+  let url = '';
+  const fake = (async (u: string) => {
+    url = u;
+    return new Response(Buffer.from([1, 2]), { status: 200, headers: { 'content-type': 'video/mp4', 'x-request-id': 'r9' } });
+  }) as unknown as typeof fetch;
+  const got = await gatewayFetchBytes('/v1/gateway/video/generation/gw.a.b/download/?model=m', {
+    apiKey: 'k',
+    base: 'https://a.test/',
+    fetchImpl: fake,
+  });
+  assert.equal(url, 'https://a.test/v1/gateway/video/generation/gw.a.b/download/?model=m');
+  assert.deepEqual([...got.bytes], [1, 2]);
+  assert.equal(got.requestId, 'r9');
+});
+
+test('a provider download never carries the API key', async () => {
+  const { downloadPublic } = await import('./api.js');
+  let init: RequestInit | undefined;
+  const fake = (async (_u: string, i?: RequestInit) => {
+    init = i;
+    return new Response('x', { status: 200, headers: { 'content-type': 'image/png' } });
+  }) as unknown as typeof fetch;
+  await downloadPublic('https://cdn.provider.test/out.png', fake);
+  assert.equal(init?.headers, undefined);
+});
