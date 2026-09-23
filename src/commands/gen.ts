@@ -451,9 +451,11 @@ async function genWait(ctx: Ctx): Promise<number> {
     throw new CliError(`No resumable job "${ref}" in this machine's history.`, { hint: 'Run `baze history` to list them.' });
   }
   if (entry.status === 'completed') {
-    for (const file of entry.files ?? []) out(file);
     info(`Already collected (${entry.at}).`);
-    return 0;
+    return finish(ctx, {
+      kind: entry.kind, model: entry.model, historyId: entry.id, files: entry.files ?? [],
+      operationId: entry.operationId, credits: entry.credits, requestId: entry.requestId,
+    });
   }
   if (entry.kind === 'video') return waitVideo(ctx, entry, entry.operationId, entry.requestId);
   if (entry.kind === 'transcribe') return waitTranscript(ctx, entry, entry.operationId, entry.credits ?? null, entry.requestId);
