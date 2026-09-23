@@ -59,6 +59,18 @@ function saveConversation(botId: string, messages: Message[]): void {
   }
 }
 
+/** A workflow bot can take minutes; past this, the provider is not coming back. */
+const DEFAULT_TIMEOUT_S = 600;
+
+export function botTimeoutMs(raw: string | true | undefined): number {
+  if (raw === undefined) return DEFAULT_TIMEOUT_S * 1000;
+  const n = Number(raw);
+  if (typeof raw !== 'string' || !Number.isFinite(n) || n <= 0) {
+    throw new CliError('--timeout is in seconds and must be positive.');
+  }
+  return n * 1000;
+}
+
 export function parseBotId(raw: string | undefined): string {
   if (!raw || !/^\d+$/.test(raw)) {
     throw new CliError('A chatbot is named by its number.', {
@@ -83,11 +95,13 @@ async function turn(
   apiKey: string,
   botId: string,
   messages: Message[],
+  timeoutMs: number,
 ): Promise<{ text: string; credits: number | null; files: BotFile[]; requestId?: string }> {
   const { body, requestId } = await gatewayFetchJson<BotReply>(`/chatbots/${botId}/chat/completions/`, {
     apiKey,
     method: 'POST',
     body: { messages, stream: false },
+    timeoutMs,
   });
   return {
     text: body?.choices?.[0]?.message?.content ?? '',
@@ -116,6 +130,7 @@ async function saveFiles(apiKey: string, files: BotFile[]): Promise<string[]> {
 async function ask(parsed: Parsed): Promise<number> {
   const apiKey = requireApiKey();
   const botId = parseBotId(parsed.positionals[1]);
+  const timeoutMs = botTimeoutMs(parsed.flags.get('timeout'));
   let question = parsed.positionals.slice(2).join(' ').trim();
   if (!question && !process.stdin.isTTY) question = (await readStdin()).trim();
   if (!question) throw new CliError('No question given.', { hint: `baze bot ask ${botId} "question"` });
@@ -126,7 +141,7 @@ async function ask(parsed: Parsed): Promise<number> {
   recordHistory({ id, at: new Date().toISOString(), kind: 'bot', model: `bot:${botId}`, status: 'submitted', host: apiBase(), prompt: question });
   let reply: Awaited<ReturnType<typeof turn>>;
   try {
-    reply = await turn(apiKey, botId, messages);
+    reply = await turn(apiKey, botId, messages, timeoutMs);
   } catch (error) {
     recordHistory({ id, at: new Date().toISOString(), kind: 'bot', model: `bot:${botId}`, status: 'failed', host: apiBase(), error: String((error as Error).message) });
     throw error;
@@ -165,6 +180,7 @@ async function ask(parsed: Parsed): Promise<number> {
 async function chat(parsed: Parsed): Promise<number> {
   const apiKey = requireApiKey();
   const botId = parseBotId(parsed.positionals[1]);
+  const timeoutMs = botTimeoutMs(parsed.flags.get('timeout'));
   if (!process.stdin.isTTY || parsed.flags.get('no-input')) {
     throw new CliError('baze bot chat is interactive.', { hint: `For scripts and agents use \`baze bot ask ${botId} "..." [--continue]\`.` });
   }
@@ -183,7 +199,7 @@ async function chat(parsed: Parsed): Promise<number> {
       }
       messages.push({ role: 'user', content: line });
       try {
-        const reply = await turn(apiKey, botId, messages);
+        const reply = await turn(apiKey, botId, messages, timeoutMs);
         messages.push({ role: 'assistant', content: reply.text });
         saveConversation(botId, messages);
         out(reply.text);

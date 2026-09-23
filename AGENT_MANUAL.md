@@ -165,7 +165,7 @@ Result:
 ## Studio chatbots
 
 ```bash
-baze bot ask <chatbot id> "<question>" [--continue] [--save] --json
+baze bot ask <chatbot id> "<question>" [--continue] [--save] [--timeout S] --json
 echo "<question>" | baze bot ask <chatbot id> --json
 baze bot chat <chatbot id> [--continue]          # interactive; refuses without a terminal
 ```
@@ -183,7 +183,7 @@ baze bot chat <chatbot id> [--continue]          # interactive; refuses without 
 }
 ```
 
-The chatbot runs as it does in the studio: its prompt, knowledge, workflow and tools. The gateway keeps no conversation; `--continue` resends this machine's last conversation with that bot (`~/.baze/conversations/bot-<id>.json`), so `turns` grows and so does the cost. `--save` downloads the files the bot produced into the current directory. The chatbot needs API access turned on by its owner; the id is a number.
+The chatbot runs as it does in the studio: its prompt, knowledge, workflow and tools. The gateway keeps no conversation; `--continue` resends this machine's last conversation with that bot (`~/.baze/conversations/bot-<id>.json`), so `turns` grows and so does the cost. `--save` downloads the files the bot produced into the current directory. A reply that has not come after `--timeout` seconds (default 600) is an error; the bot may still be running on the server. The chatbot needs API access turned on by its owner; the id is a number.
 
 ## History
 

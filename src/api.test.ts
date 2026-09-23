@@ -148,3 +148,16 @@ test('a model list cached by an older baze is refetched, not trusted', async () 
   await fetchCatalogDetail('k', { base, fetchImpl: fresh });
   assert.equal(calls, 1, 'its own cache is still used');
 });
+
+test('a request past its timeout fails with a message instead of hanging', async () => {
+  // A provider that never sends headers held `baze bot ask` open for 43 minutes.
+  const never = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as unknown as typeof fetch;
+  const { gatewayFetchJson } = await import('./api.js');
+  await assert.rejects(
+    gatewayFetchJson('/chatbots/1/chat/completions/', { apiKey: 'k', base: 'https://slow.test', fetchImpl: never, timeoutMs: 50 }),
+    /No answer from https:\/\/slow\.test after 0s/,
+  );
+});

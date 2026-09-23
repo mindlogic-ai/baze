@@ -98,7 +98,7 @@ baze gen <kind> --model ID --params
   sent; --params lists them. Local --image files are sent inline (up to 18 MB).
   A video is waited for (up to --timeout seconds, default 900); Ctrl-C is safe,
   \`baze gen wait\` resumes it. Every call is recorded in \`baze history\`.`,
-  bot: `baze bot ask <chatbot id> "<question>" [--continue] [--save] [--json]
+  bot: `baze bot ask <chatbot id> "<question>" [--continue] [--save] [--timeout S] [--json]
 baze bot chat <chatbot id> [--continue]
   A studio chatbot - its prompt, knowledge, workflow and tools - from the shell.
   The gateway keeps no conversation: --continue resends this machine's last one

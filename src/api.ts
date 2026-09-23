@@ -77,6 +77,8 @@ interface RequestOpts {
   form?: FormData;
   headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
+  /** Give up after this long. A provider that never answers otherwise hangs the command forever. */
+  timeoutMs?: number;
 }
 
 const requestIdOf = (res: Response): string | undefined => res.headers.get('x-request-id') ?? undefined;
@@ -102,8 +104,14 @@ async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response
       },
       ...(opts.form !== undefined ? { body: opts.form } : {}),
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
+      ...(opts.timeoutMs !== undefined ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
-  } catch {
+  } catch (error) {
+    if ((error as Error)?.name === 'TimeoutError') {
+      throw new CliError(`No answer from ${base} after ${Math.round((opts.timeoutMs ?? 0) / 1000)}s.`, {
+        hint: 'The request may still be running there; raise --timeout to wait longer.',
+      });
+    }
     // No status: callers treat this as "unreachable", not "refused".
     throw new CliError(`Could not reach ${base}.`, {
       hint: 'Check the network, or the host in --api-base / BAZE_API_BASE.',
