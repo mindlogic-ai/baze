@@ -8,6 +8,13 @@ import { CliError } from './ui.js';
 
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Bumped whenever `ModelRow` gains a field. The cache lives in the same
+ * directory across upgrades, so a list an older baze wrote (0.1 has no
+ * `audioClient`) must be refetched, not trusted for the rest of its TTL.
+ */
+const CATALOG_CACHE_VERSION = 2;
+
 interface GatewayErrorBody {
   error?: { message?: string };
   /**
@@ -278,8 +285,10 @@ export async function fetchCatalogDetail(
   const file = catalogCachePath(base, apiKey);
   if (!opts.force && existsSync(file)) {
     try {
-      const cached = JSON.parse(readFileSync(file, 'utf8')) as { at: number; rows: ModelRow[]; contract?: number };
-      if (Date.now() - cached.at < CATALOG_TTL_MS) return { rows: cached.rows, contract: cached.contract };
+      const cached = JSON.parse(readFileSync(file, 'utf8')) as { v?: number; at: number; rows: ModelRow[]; contract?: number };
+      if (cached.v === CATALOG_CACHE_VERSION && Date.now() - cached.at < CATALOG_TTL_MS) {
+        return { rows: cached.rows, contract: cached.contract };
+      }
     } catch {
       // fall through and refetch
     }
@@ -292,7 +301,7 @@ export async function fetchCatalogDetail(
   const catalog: Catalog = { rows: body.data.map(toRow) };
   if (typeof body.cli_contract === 'number') catalog.contract = body.cli_contract;
   try {
-    writeFileSync(file, JSON.stringify({ at: Date.now(), ...catalog }), { mode: 0o600 });
+    writeFileSync(file, JSON.stringify({ v: CATALOG_CACHE_VERSION, at: Date.now(), ...catalog }), { mode: 0o600 });
   } catch {
     // A read-only HOME must not break the command.
   }

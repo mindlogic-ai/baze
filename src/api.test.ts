@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { catalogCachePath, fetchCatalogDetail, gatewayFetch, laneFor } from './api.js';
 
@@ -122,4 +124,27 @@ test('a provider download never carries the API key', async () => {
   }) as unknown as typeof fetch;
   await downloadPublic('https://cdn.provider.test/out.png', fake);
   assert.equal(init?.headers, undefined);
+});
+
+test('a model list cached by an older baze is refetched, not trusted', async () => {
+  // 0.1 cached rows without `audioClient`; read back by 0.2 inside the TTL,
+  // `baze gen speech` said the key had no text-to-speech model.
+  process.env.BAZE_CONFIG_DIR = '/tmp/baze-cache-test';
+  const base = 'https://upgrade.test';
+  const file = catalogCachePath(base, 'k');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ at: Date.now(), rows: [{ id: 'tts', type: 'audio', lane: 'compat' }] }));
+  let calls = 0;
+  const fresh = (async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({ object: 'list', data: [{ id: 'tts', type: 'audio', audio_client: 'google' }] }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const first = await fetchCatalogDetail('k', { base, fetchImpl: fresh });
+  assert.equal(calls, 1);
+  assert.equal(first.rows[0]?.audioClient, 'google');
+  await fetchCatalogDetail('k', { base, fetchImpl: fresh });
+  assert.equal(calls, 1, 'its own cache is still used');
 });
