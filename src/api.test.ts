@@ -161,3 +161,28 @@ test('a request past its timeout fails with a message instead of hanging', async
     /No answer from https:\/\/slow\.test after 0s/,
   );
 });
+
+test('a provider download that stalls fails instead of hanging', async () => {
+  const { downloadPublic } = await import('./api.js');
+  const never = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as unknown as typeof fetch;
+  await assert.rejects(downloadPublic('https://cdn.provider.test/v.mp4', never, 50), /No answer from cdn\.provider\.test/);
+});
+
+test('a body that stalls after the headers fails instead of hanging', async () => {
+  const { gatewayFetchBytes } = await import('./api.js');
+  const stalls = ((_url: string, init?: RequestInit) => {
+    const body = new ReadableStream({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+      },
+    });
+    return Promise.resolve(new Response(body, { status: 200 }));
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    gatewayFetchBytes('/audio/music/', { apiKey: 'k', base: 'https://slow.test', fetchImpl: stalls, timeoutMs: 50 }),
+    /No answer from https:\/\/slow\.test/,
+  );
+});

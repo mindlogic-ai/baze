@@ -83,6 +83,29 @@ interface RequestOpts {
 
 const requestIdOf = (res: Response): string | undefined => res.headers.get('x-request-id') ?? undefined;
 
+const isTimeout = (error: unknown): boolean => (error as Error)?.name === 'TimeoutError';
+
+const timedOut = (where: string, timeoutMs: number | undefined): CliError =>
+  new CliError(`No answer from ${where} after ${Math.round((timeoutMs ?? 0) / 1000)}s.`, {
+    hint: 'The request may still be running there; raise --timeout to wait longer.',
+  });
+
+/**
+ * A body read under the request's timeout. The signal also covers the body, so
+ * a stream that stalls after the headers ends here rather than hanging.
+ */
+async function readBody<T>(read: () => Promise<T>, where: string, timeoutMs: number | undefined): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isTimeout(error)) throw timedOut(where, timeoutMs);
+    throw new CliError(`The answer from ${where} was cut off.`, { hint: 'Check the network and retry.' });
+  }
+}
+
+/** A provider file download: a finished result, so a stall means the host is not coming back. */
+const DOWNLOAD_TIMEOUT_MS = 600_000;
+
 /**
  * The authed request and the gateway's error mapping, before any reading of a
  * successful body. Every error carries the request id when the gateway sent one.
@@ -107,11 +130,7 @@ async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response
       ...(opts.timeoutMs !== undefined ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
     });
   } catch (error) {
-    if ((error as Error)?.name === 'TimeoutError') {
-      throw new CliError(`No answer from ${base} after ${Math.round((opts.timeoutMs ?? 0) / 1000)}s.`, {
-        hint: 'The request may still be running there; raise --timeout to wait longer.',
-      });
-    }
+    if (isTimeout(error)) throw timedOut(base, opts.timeoutMs);
     // No status: callers treat this as "unreachable", not "refused".
     throw new CliError(`Could not reach ${base}.`, {
       hint: 'Check the network, or the host in --api-base / BAZE_API_BASE.',
@@ -141,7 +160,7 @@ export async function gatewayFetchBytes(path: string, opts: RequestOpts): Promis
   return {
     status: res.status,
     contentType: res.headers.get('content-type') ?? '',
-    bytes: Buffer.from(await res.arrayBuffer()),
+    bytes: Buffer.from(await readBody(() => res.arrayBuffer(), opts.base ?? apiBase(), opts.timeoutMs)),
     requestId: requestIdOf(res),
     headers: res.headers,
   };
@@ -154,15 +173,19 @@ export async function gatewayFetchBytes(path: string, opts: RequestOpts): Promis
 export async function downloadPublic(
   url: string,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = DOWNLOAD_TIMEOUT_MS,
 ): Promise<{ bytes: Buffer; contentType: string }> {
+  const host = new URL(url).host;
   let res: Response;
   try {
-    res = await fetchImpl(url);
-  } catch {
-    throw new CliError(`Could not download ${new URL(url).host}.`, { hint: 'Check the network and retry.' });
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    if (isTimeout(error)) throw timedOut(host, timeoutMs);
+    throw new CliError(`Could not download ${host}.`, { hint: 'Check the network and retry.' });
   }
-  if (!res.ok) throw new CliError(`Download failed: ${new URL(url).host} answered HTTP ${res.status}.`);
-  return { bytes: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get('content-type') ?? '' };
+  if (!res.ok) throw new CliError(`Download failed: ${host} answered HTTP ${res.status}.`);
+  const bytes = await readBody(() => res.arrayBuffer(), host, timeoutMs);
+  return { bytes: Buffer.from(bytes), contentType: res.headers.get('content-type') ?? '' };
 }
 
 /**
@@ -175,7 +198,7 @@ export async function gatewayFetchRaw(path: string, opts: RequestOpts): Promise<
   return {
     status: res.status,
     contentType: res.headers.get('content-type') ?? '',
-    text: await res.text(),
+    text: await readBody(() => res.text(), opts.base ?? apiBase(), opts.timeoutMs),
     requestId: requestIdOf(res),
   };
 }

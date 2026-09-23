@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline/promises';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Parsed } from '../args.js';
 import { downloadPublic, gatewayFetchBytes, gatewayFetchJson } from '../api.js';
@@ -38,22 +38,37 @@ export function conversationPath(botId: string): string {
   return join(configDir(), 'conversations', `bot-${botId}.json`);
 }
 
-function loadConversation(botId: string): Message[] {
+/**
+ * The thread `--continue` resends. A file that is there but unreadable is an
+ * error, not an empty thread: starting over silently would bill a turn that
+ * answers without the context the caller asked to keep.
+ */
+export function loadConversation(botId: string): Message[] {
   const path = conversationPath(botId);
   if (!existsSync(path)) return [];
+  let value: unknown;
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    return Array.isArray(value) ? (value as Message[]) : [];
+    value = JSON.parse(readFileSync(path, 'utf8'));
   } catch {
-    return [];
+    value = undefined;
   }
+  if (!Array.isArray(value)) {
+    throw new CliError(`The saved conversation with chatbot ${botId} is damaged.`, {
+      hint: `Ask without --continue to start a new one (it replaces ${path}).`,
+    });
+  }
+  return value as Message[];
 }
 
 function saveConversation(botId: string, messages: Message[]): void {
   const dir = join(configDir(), 'conversations');
   try {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    writeFileSync(conversationPath(botId), JSON.stringify(messages), { mode: 0o600 });
+    // Written aside and renamed, so an interrupted write leaves the old thread whole.
+    const path = conversationPath(botId);
+    const partial = `${path}.${process.pid}.tmp`;
+    writeFileSync(partial, JSON.stringify(messages), { mode: 0o600 });
+    renameSync(partial, path);
   } catch {
     // A read-only HOME only costs --continue.
   }
@@ -111,15 +126,15 @@ async function turn(
   };
 }
 
-async function saveFiles(apiKey: string, files: BotFile[]): Promise<string[]> {
+async function saveFiles(apiKey: string, files: BotFile[], timeoutMs: number): Promise<string[]> {
   const saved: string[] = [];
   for (const file of files) {
     // The link is signed (`/v1/public/f/{id}/{sig}/`): the signature is the
     // credential, so an absolute link is fetched without the key. A relative
     // one is on the gateway's own host.
     const got = file.url.startsWith('http')
-      ? await downloadPublic(file.url)
-      : await gatewayFetchBytes(file.url, { apiKey });
+      ? await downloadPublic(file.url, fetch, timeoutMs)
+      : await gatewayFetchBytes(file.url, { apiKey, timeoutMs });
     const path = freePath(file.filename);
     writeResult(path, got.bytes);
     saved.push(path);
@@ -147,7 +162,7 @@ async function ask(parsed: Parsed): Promise<number> {
     throw error;
   }
   saveConversation(botId, [...messages, { role: 'assistant', content: reply.text }]);
-  const saved = parsed.flags.get('save') ? await saveFiles(apiKey, reply.files) : [];
+  const saved = parsed.flags.get('save') ? await saveFiles(apiKey, reply.files, timeoutMs) : [];
   recordHistory({
     id, at: new Date().toISOString(), kind: 'bot', model: `bot:${botId}`, status: 'completed', host: apiBase(),
     credits: reply.credits, requestId: reply.requestId, files: saved,

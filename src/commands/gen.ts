@@ -28,12 +28,31 @@ type Kind = (typeof KINDS)[number];
 
 const POLL_MS = 5_000;
 const DEFAULT_TIMEOUT_S = 900;
+/** One status poll or model card: small answers, so a minute means the host is gone. */
+const QUICK_REQUEST_MS = 60_000;
+
+/**
+ * The options each kind reads, besides the globals and `--model`, `-o`,
+ * `--params`, `--timeout`. Anything else would be accepted and ignored on a
+ * paid call, so it is refused.
+ */
+const KIND_FLAGS: Readonly<Record<Kind | 'wait', readonly string[]>> = {
+  image: ['set', 'image', 'n'],
+  video: ['set', 'image', 'no-wait'],
+  speech: ['voice'],
+  music: ['lyrics', 'seconds', 'instrumental'],
+  transcribe: ['lang', 'no-diarize'],
+  wait: [],
+};
+const SHARED_FLAGS = ['model', 'o', 'output', 'params', 'timeout'];
 
 interface Ctx {
   apiKey: string;
   parsed: Parsed;
   json: boolean;
   host: string;
+  /** Checked before anything is sent: a bad value must not surface after a paid submit. */
+  timeoutS: number;
 }
 
 interface Result {
@@ -78,7 +97,10 @@ async function defaultAudioModel(ctx: Ctx, kind: 'speech' | 'transcribe'): Promi
 /** The model's declared parameters; undefined when the gateway does not publish them. */
 async function paramSpecs(ctx: Ctx, model: string): Promise<ParamSpec[] | undefined> {
   try {
-    const card = await gatewayFetch<{ parameters?: ParamSpec[] }>(`/models/${model}/`, { apiKey: ctx.apiKey });
+    const card = await gatewayFetch<{ parameters?: ParamSpec[] }>(`/models/${model}/`, {
+      apiKey: ctx.apiKey,
+      timeoutMs: QUICK_REQUEST_MS,
+    });
     return Array.isArray(card?.parameters) ? card.parameters : undefined;
   } catch (error) {
     // An unknown model is the POST's to report, with the gateway's own list.
@@ -118,13 +140,30 @@ async function pollUntilDone<T extends { status?: string }>(
   }
 }
 
-function timeoutS(ctx: Ctx): number {
-  const raw = str(ctx.parsed.flags.get('timeout'));
+export function parseTimeoutS(raw: string | true | undefined): number {
   if (raw === undefined) return DEFAULT_TIMEOUT_S;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) throw new CliError('--timeout is in seconds and must be positive.');
+  if (typeof raw !== 'string' || !Number.isFinite(n) || n <= 0) {
+    throw new CliError('--timeout is in seconds and must be positive.');
+  }
   return n;
 }
+
+/** Refuses an option this kind would ignore, before any request. */
+export function checkKindFlags(kind: Kind | 'wait', parsed: Parsed): void {
+  const own = new Set([...KIND_FLAGS[kind], ...SHARED_FLAGS]);
+  const gen = new Set(Object.values(KIND_FLAGS).flat());
+  for (const name of [...parsed.flags.keys(), ...parsed.lists.keys()]) {
+    if (gen.has(name) && !own.has(name)) {
+      const dash = name.length === 1 ? '-' : '--';
+      throw new CliError(`${dash}${name} does not apply to baze gen ${kind}.`, {
+        hint: 'Run `baze help gen` for what each kind takes.',
+      });
+    }
+  }
+}
+
+const submitMs = (ctx: Ctx): number => ctx.timeoutS * 1000;
 
 function finish(ctx: Ctx, result: Result): number {
   if (ctx.json) {
@@ -166,9 +205,9 @@ interface ImageReply {
   data?: { url: string }[];
 }
 
-async function saveImages(urls: string[], output: string | undefined): Promise<string[]> {
+async function saveImages(urls: string[], output: string | undefined, timeoutMs: number): Promise<string[]> {
   const fetched = await Promise.all(
-    urls.map(async (url) => (url.startsWith('data:') ? decodeDataUrl(url) : downloadPublic(url))),
+    urls.map(async (url) => (url.startsWith('data:') ? decodeDataUrl(url) : downloadPublic(url, fetch, timeoutMs))),
   );
   const ext = extensionFor(fetched[0]?.contentType ?? '', urls[0], 'png');
   const paths = outputPaths('image', urls.length, ext, output);
@@ -197,7 +236,7 @@ async function genImage(ctx: Ctx): Promise<number> {
   recordHistory(base);
   try {
     const { body: reply, requestId } = await gatewayFetchJson<ImageReply>('/images/generate/', {
-      apiKey: ctx.apiKey, method: 'POST', body,
+      apiKey: ctx.apiKey, method: 'POST', body, timeoutMs: submitMs(ctx),
     });
     let final = reply;
     if (reply.operation_id && !reply.data) {
@@ -206,7 +245,7 @@ async function genImage(ctx: Ctx): Promise<number> {
       final = await pollImage(ctx, model, reply.operation_id);
     }
     if (!final.data?.length) throw new CliError(final.error ?? 'The gateway returned no image.');
-    const files = await saveImages(final.data.map((d) => d.url), outputFlag(ctx));
+    const files = await saveImages(final.data.map((d) => d.url), outputFlag(ctx), submitMs(ctx));
     recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files, requestId, operationId: reply.operation_id });
     return finish(ctx, { kind: 'image', model, historyId: base.id, files, requestId, operationId: reply.operation_id });
   } catch (error) {
@@ -220,11 +259,12 @@ async function pollImage(ctx: Ctx, model: string, operationId: string): Promise<
     async () => {
       const r = await gatewayFetch<ImageReply>(`/images/generate/${operationId}/?model=${encodeURIComponent(model)}`, {
         apiKey: ctx.apiKey,
+        timeoutMs: QUICK_REQUEST_MS,
       });
       // A completed image poll answers in the generate shape, with no status.
       return r.data ? { ...r, status: 'completed' } : r;
     },
-    timeoutS(ctx),
+    ctx.timeoutS,
   );
   if (reply.status === 'failed') throw new CliError(`The image failed: ${reply.error ?? 'no reason given'}.`);
   return reply;
@@ -241,8 +281,8 @@ interface VideoStatus {
 
 async function downloadVideo(ctx: Ctx, uri: string, output: string | undefined): Promise<string> {
   const got = uri.startsWith('/v1/')
-    ? await gatewayFetchBytes(uri, { apiKey: ctx.apiKey })
-    : await downloadPublic(uri);
+    ? await gatewayFetchBytes(uri, { apiKey: ctx.apiKey, timeoutMs: submitMs(ctx) })
+    : await downloadPublic(uri, fetch, submitMs(ctx));
   const [path] = outputPaths('video', 1, extensionFor(got.contentType, uri, 'mp4'), output);
   writeResult(path!, got.bytes);
   return path!;
@@ -255,8 +295,9 @@ async function waitVideo(ctx: Ctx, base: HistoryEntry, operationId: string, requ
       () =>
         gatewayFetch<VideoStatus>(`/video/generation/${operationId}/?model=${encodeURIComponent(base.model)}`, {
           apiKey: ctx.apiKey,
+          timeoutMs: QUICK_REQUEST_MS,
         }),
-      timeoutS(ctx),
+      ctx.timeoutS,
     );
     if (status.status !== 'completed' || !status.video_uri) {
       throw new CliError(`The video failed: ${status.error ?? status.status ?? 'no reason given'}.`, {
@@ -293,6 +334,7 @@ async function genVideo(ctx: Ctx): Promise<number> {
       apiKey: ctx.apiKey,
       method: 'POST',
       body: { model, prompt: text, parameters, ...(images.length ? { input_urls: images } : {}) },
+      timeoutMs: submitMs(ctx),
     }));
   } catch (error) {
     recordFailure(base, error);
@@ -327,7 +369,7 @@ async function genSpeech(ctx: Ctx): Promise<number> {
   recordHistory(base);
   try {
     const got = await gatewayFetchBytes('/audio/speech/', {
-      apiKey: ctx.apiKey, method: 'POST', body: { model, input, ...(voice ? { voice } : {}) },
+      apiKey: ctx.apiKey, method: 'POST', body: { model, input, ...(voice ? { voice } : {}) }, timeoutMs: submitMs(ctx),
     });
     const pcm = got.contentType.startsWith('audio/pcm');
     const bytes = pcm ? pcmToWav(got.bytes) : got.bytes;
@@ -358,7 +400,9 @@ async function genMusic(ctx: Ctx): Promise<number> {
   };
   recordHistory(base);
   try {
-    const got = await gatewayFetchBytes('/audio/music/', { apiKey: ctx.apiKey, method: 'POST', body });
+    const got = await gatewayFetchBytes('/audio/music/', {
+      apiKey: ctx.apiKey, method: 'POST', body, timeoutMs: submitMs(ctx),
+    });
     const [path] = outputPaths('music', 1, extensionFor(got.contentType, undefined, 'mp3'), outputFlag(ctx));
     writeResult(path!, got.bytes);
     const charged = got.headers.get('x-credits-charged');
@@ -383,8 +427,8 @@ async function waitTranscript(ctx: Ctx, base: HistoryEntry, operationId: string,
   try {
     const status = await pollUntilDone(
       'The transcription',
-      () => gatewayFetch<SttStatus>(`/audio/transcriptions/${operationId}/`, { apiKey: ctx.apiKey }),
-      timeoutS(ctx),
+      () => gatewayFetch<SttStatus>(`/audio/transcriptions/${operationId}/`, { apiKey: ctx.apiKey, timeoutMs: QUICK_REQUEST_MS }),
+      ctx.timeoutS,
     );
     if (status.status !== 'completed') throw new CliError(`The transcription failed: ${status.error ?? status.status ?? 'no reason given'}.`);
     const output = outputFlag(ctx);
@@ -428,7 +472,9 @@ async function genTranscribe(ctx: Ctx): Promise<number> {
   let started: SttStatus;
   let requestId: string | undefined;
   try {
-    ({ body: started, requestId } = await gatewayFetchJson<SttStatus>('/audio/transcriptions/', { apiKey: ctx.apiKey, method: 'POST', form }));
+    ({ body: started, requestId } = await gatewayFetchJson<SttStatus>('/audio/transcriptions/', {
+      apiKey: ctx.apiKey, method: 'POST', form, timeoutMs: submitMs(ctx),
+    }));
   } catch (error) {
     recordFailure(base, error);
   }
@@ -462,7 +508,7 @@ async function genWait(ctx: Ctx): Promise<number> {
   if (entry.kind === 'image') {
     try {
       const final = await pollImage(ctx, entry.model, entry.operationId);
-      const files = await saveImages((final.data ?? []).map((d) => d.url), outputFlag(ctx));
+      const files = await saveImages((final.data ?? []).map((d) => d.url), outputFlag(ctx), submitMs(ctx));
       recordHistory({ ...entry, at: new Date().toISOString(), status: 'completed', files });
       return finish(ctx, { kind: 'image', model: entry.model, historyId: entry.id, files, operationId: entry.operationId });
     } catch (error) {
@@ -476,15 +522,24 @@ async function genWait(ctx: Ctx): Promise<number> {
 
 export async function genCommand(parsed: Parsed): Promise<number> {
   const kind = parsed.positionals[0];
+  const context = (): Ctx => ({
+    apiKey: requireApiKey(),
+    parsed,
+    json: parsed.flags.get('json') === true,
+    host: apiBase(),
+    timeoutS: parseTimeoutS(parsed.flags.get('timeout')),
+  });
   if (kind === 'wait') {
-    return genWait({ apiKey: requireApiKey(), parsed, json: parsed.flags.get('json') === true, host: apiBase() });
+    checkKindFlags('wait', parsed);
+    return genWait(context());
   }
   if (!KINDS.includes(kind as Kind)) {
     throw new CliError(kind ? `Unknown kind "${kind}".` : 'What should baze generate?', {
       hint: `baze gen ${KINDS.join('|')} ...   or   baze gen wait <id>`,
     });
   }
-  const ctx: Ctx = { apiKey: requireApiKey(), parsed, json: parsed.flags.get('json') === true, host: apiBase() };
+  checkKindFlags(kind as Kind, parsed);
+  const ctx = context();
 
   if (parsed.flags.get('params')) {
     const model = requireModel(ctx, kind as Kind);
