@@ -127,8 +127,8 @@ test('a provider download never carries the API key', async () => {
 });
 
 test('a model list cached by an older baze is refetched, not trusted', async () => {
-  // 0.1 cached rows without `audioClient`; read back by 0.2 inside the TTL,
-  // `baze gen speech` said the key had no text-to-speech model.
+  // Rows cached without `audioClient` and read back inside the TTL made
+  // `baze gen speech` say the key had no text-to-speech model.
   process.env.BAZE_CONFIG_DIR = '/tmp/baze-cache-test';
   const base = 'https://upgrade.test';
   const file = catalogCachePath(base, 'k');

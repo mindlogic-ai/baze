@@ -10,7 +10,7 @@ const CATALOG_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Bumped whenever `ModelRow` gains a field. The cache lives in the same
- * directory across upgrades, so a list an older baze wrote (0.1 has no
+ * directory across upgrades, so a list an older baze wrote (one without
  * `audioClient`) must be refetched, not trusted for the rest of its TTL.
  */
 const CATALOG_CACHE_VERSION = 2;
