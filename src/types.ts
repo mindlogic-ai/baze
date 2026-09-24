@@ -30,6 +30,12 @@ export interface ModelRow {
   contextLimit: number | null;
   /** Provider output ceiling from the catalog; absent or null when unknown. */
   maxOutputTokens?: number | null;
+  /**
+   * Audio rows only: the engine behind the model (`google` = text-to-speech,
+   * `google_lyria3` / `elevenlabs` = music, `soniox` = transcription). The
+   * gateway's only way to tell those apart, since all are `type: "audio"`.
+   */
+  audioClient?: string | null;
   /** USD per 1M tokens at list price, newest `price` row - what the biller reads. */
   pricing: ModelPricing | null;
 }

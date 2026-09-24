@@ -21,11 +21,13 @@ export const OPENCODE_PROVIDERS: Record<Lane, { id: string; npm: string; name: s
 const LANES: Lane[] = ['anthropic', 'responses', 'gemini', 'compat'];
 
 const DEFAULT_CONTEXT = 200000;
-// Used only when the catalog has no output ceiling for a model. OpenCode sends
-// min(limit.output, 32000) as the request cap and treats a missing value as
-// 32000, so an unknown number must be stated, not left out. The native lanes'
-// current models all allow 32k; the compat lane includes 8k models.
-const UNKNOWN_OUTPUT: Record<Lane, number> = { anthropic: 32000, responses: 32000, gemini: 32000, compat: 8192 };
+// Used only when the catalog has no output ceiling for a model: its provider
+// publishes none (the server lists each such model with a reason). OpenCode
+// sends min(limit.output, 32000) as the request cap, so 32000 is OpenCode's own
+// default. An 8k model on the compat lane carries its figure in the catalog; a
+// flat 8192 here cut Grok 4.7 off at a quarter of a reply it can give (26,921
+// tokens measured 2026-09-24).
+const UNKNOWN_OUTPUT: Record<Lane, number> = { anthropic: 32000, responses: 32000, gemini: 32000, compat: 32000 };
 
 // Following GenCode: titles and summaries on a small model, and sub-agents on
 // a flash-class model with a step cap rather than on the primary.

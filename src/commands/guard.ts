@@ -1,5 +1,5 @@
 import type { Parsed } from '../args.js';
-import { gatewayFetch } from '../api.js';
+import { BATCH_REQUEST_TIMEOUT_MS, gatewayFetch } from '../api.js';
 import { readTextInputs } from '../input.js';
 import { requireApiKey } from './models.js';
 import { c, CliError, info, out, say } from '../ui.js';
@@ -64,6 +64,7 @@ export async function guardCommand(parsed: Parsed): Promise<number> {
 
   const res = await gatewayFetch<GuardResponse>('/guard/', {
     apiKey,
+    timeoutMs: BATCH_REQUEST_TIMEOUT_MS,
     method: 'POST',
     body: buildGuardBody(input, parsed.flags),
   });

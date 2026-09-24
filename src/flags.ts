@@ -35,6 +35,28 @@ export const COMMAND_FLAGS: Readonly<Record<string, KnownFlags>> = {
   rerank: { ...GLOBAL, file: 'value', model: 'value', 'top-n': 'value' },
   guard: { ...GLOBAL, file: 'value', mode: 'value', categories: 'value' },
   mcp: GLOBAL,
+  gen: {
+    ...GLOBAL,
+    model: 'value',
+    set: 'list',
+    image: 'list',
+    n: 'value',
+    o: 'value',
+    output: 'value',
+    'no-wait': 'boolean',
+    timeout: 'value',
+    params: 'boolean',
+    voice: 'value',
+    lyrics: 'value',
+    seconds: 'value',
+    instrumental: 'boolean',
+    lang: 'value',
+    'no-diarize': 'boolean',
+    estimate: 'boolean',
+  },
+  bot: { ...GLOBAL, continue: 'boolean', save: 'boolean', timeout: 'value' },
+  history: { ...GLOBAL, last: 'value', kind: 'value' },
+  skill: { ...GLOBAL, 'dry-run': 'boolean' },
   credits: GLOBAL,
   usage: { ...GLOBAL, from: 'value', to: 'value', by: 'value', scope: 'value' },
   claude: LAUNCHER,
@@ -45,6 +67,31 @@ export const COMMAND_FLAGS: Readonly<Record<string, KnownFlags>> = {
   update: GLOBAL,
   docs: GLOBAL,
 };
+
+/** Commands whose unknown flags belong to the tool they launch. Every other command rejects them. */
+export const PASSTHROUGH_COMMANDS: ReadonlySet<string> = new Set(['claude', 'codex', 'opencode']);
+
+/**
+ * The parser stops at the first flag it does not know and hands the rest on,
+ * which is right for a launcher and wrong everywhere else: `baze embed "x"
+ * --dimension 256` used to embed at the default size and say nothing. After
+ * an explicit `--` the rest are arguments, as in any Unix tool - a prompt may
+ * start with a dash. Returns the offending token, or undefined when all is well
+ * (and moves `--` arguments into positionals).
+ */
+export function claimStrayArgs(
+  parsed: { command?: string; positionals: string[]; passthrough: string[] },
+  argv: readonly string[],
+): string | undefined {
+  if (!parsed.command || PASSTHROUGH_COMMANDS.has(parsed.command) || parsed.passthrough.length === 0) return undefined;
+  const dashdash = argv.indexOf('--');
+  if (dashdash !== -1 && argv.length - dashdash - 1 === parsed.passthrough.length) {
+    parsed.positionals.push(...parsed.passthrough);
+    parsed.passthrough = [];
+    return undefined;
+  }
+  return parsed.passthrough.find((a) => a.startsWith('-')) ?? parsed.passthrough[0];
+}
 
 /** The flag set for a command. An unknown command gets the globals, so `--help` still parses. */
 export function knownFor(command: string | undefined): KnownFlags {

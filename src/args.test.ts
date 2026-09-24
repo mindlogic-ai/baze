@@ -42,3 +42,9 @@ test('positionals collect after the command', () => {
   const p = parseArgs(['models', 'claude'], KNOWN);
   assert.deepEqual(p.positionals, ['claude']);
 });
+
+test('a list flag keeps every occurrence in order, in both spellings', () => {
+  const p = parseArgs(['gen', '--set', 'a=1', '--set=b=2', '--set', 'c=3'], { set: 'list' });
+  assert.deepEqual(p.lists.get('set'), ['a=1', 'b=2', 'c=3']);
+  assert.equal(p.flags.has('set'), false);
+});

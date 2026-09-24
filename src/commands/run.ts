@@ -11,9 +11,16 @@ import { CliError, info, warn } from '../ui.js';
 import type { CreditBalance } from './credits.js';
 import { requireApiKey } from './models.js';
 
+/**
+ * The launch-time reads are conveniences: a slow gateway falls back to the
+ * built-in list rather than holding the coding session back. The session's own
+ * LLM calls go from the tool to the gateway and are not bounded here.
+ */
+const LAUNCH_READ_TIMEOUT_MS = 20_000;
+
 async function remainingCredits(apiKey: string, base: string): Promise<number | undefined> {
   try {
-    return (await gatewayFetch<CreditBalance>('/credits/', { apiKey, base })).total.remaining;
+    return (await gatewayFetch<CreditBalance>('/credits/', { apiKey, base, timeoutMs: LAUNCH_READ_TIMEOUT_MS })).total.remaining;
   } catch {
     return undefined;
   }
@@ -27,7 +34,7 @@ export async function runCommand(tool: Tool, parsed: Parsed): Promise<number> {
   let rows: ModelRow[];
   let catalogLive = true;
   try {
-    rows = await fetchCatalog(apiKey, { base });
+    rows = await fetchCatalog(apiKey, { base, timeoutMs: LAUNCH_READ_TIMEOUT_MS });
   } catch (error) {
     // A catalog we cannot reach must not stop a coding session. The fallback
     // rows carry real lanes, so every plan builder below still works. A key the

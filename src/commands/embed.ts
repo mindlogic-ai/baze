@@ -1,5 +1,5 @@
 import type { Parsed } from '../args.js';
-import { fetchCatalog, gatewayFetch } from '../api.js';
+import { BATCH_REQUEST_TIMEOUT_MS, fetchCatalog, gatewayFetch } from '../api.js';
 import { byType } from '../catalog.js';
 import { readTextInputs } from '../input.js';
 import { requireApiKey } from './models.js';
@@ -64,6 +64,7 @@ export async function embedCommand(parsed: Parsed): Promise<number> {
 
   const res = await gatewayFetch<EmbedResponse>('/embeddings/', {
     apiKey,
+    timeoutMs: BATCH_REQUEST_TIMEOUT_MS,
     method: 'POST',
     body,
   });

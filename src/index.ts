@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs, type Parsed } from './args.js';
-import { knownFor } from './flags.js';
+import { claimStrayArgs, knownFor } from './flags.js';
 import { CliError, fail, say, setQuiet } from './ui.js';
 
 export const VERSION = '__VERSION__';
@@ -26,6 +26,10 @@ const HELP = `baze - run your coding agent through the Baze gateway. (v${VERSION
                              order documents by relevance to a query
   baze guard [text...]       find or mask personal data in text
   baze mcp [list|tools|call] the Baze MCP suites (DART, KRX, ...) through the gateway
+  baze gen image|video|speech|music|transcribe
+                             generate media; results are saved as files here
+  baze bot ask|chat <id>     talk to a studio chatbot (RAG, workflow, tools)
+  baze history               every generation and bot call, resumable
   baze credits               remaining credit balance
   baze usage                 spend, by model, key or day
   baze claude | codex | opencode
@@ -34,6 +38,7 @@ const HELP = `baze - run your coding agent through the Baze gateway. (v${VERSION
   baze setup <tool>          write the configuration permanently, with a backup
   baze doctor                check key, host, Node, tool versions, config conflicts
   baze env                   eval "$(baze env)" to export BAZE_API_KEY
+  baze skill install         teach Claude Code and Codex to use baze (gen, bot, costs)
   baze update | docs         upgrade baze; print the agent manual
 
 Global flags
@@ -82,6 +87,29 @@ const USAGE: Record<string, string> = {
   tools are free; each call is billed as one tool call. Arguments are one JSON
   object, from the argument or stdin. The suites are not injected into the
   launchers; configure a harness with the URL this prints if you want one there.`,
+  gen: `baze gen image "<prompt>" --model ID [--set k=v]... [--image <file|url>]... [--n N] [-o file]
+baze gen video "<prompt>" --model ID [--set k=v]... [--image <file|url>] [--no-wait] [-o file]
+baze gen speech "<text>" [--model ID] [--voice NAME] [-o file.wav]
+baze gen music "<prompt>" --model ID [--lyrics "..."] [--seconds N] [--instrumental] [-o file.mp3]
+baze gen transcribe <audio file> [--model ID] [--lang ko,en] [--no-diarize] [-o file.txt]
+baze gen wait <history id>
+baze gen <kind> --model ID --params
+baze gen image|video|music ... --estimate
+  Results are written to the current directory (or -o) and their paths printed
+  on stdout. --set is checked against the model's parameters before anything is
+  sent; --params lists them. --estimate prints what the call would charge, from
+  the server's own billing, and makes nothing. Local --image files are sent inline (up to 18 MB).
+  A video is waited for (up to --timeout seconds, default 900); Ctrl-C is safe,
+  \`baze gen wait\` resumes it. Every call is recorded in \`baze history\`.`,
+  bot: `baze bot ask <chatbot id> "<question>" [--continue] [--save] [--timeout S] [--json]
+baze bot chat <chatbot id> [--continue]
+  A studio chatbot - its prompt, knowledge, workflow and tools - from the shell.
+  The gateway keeps no conversation: --continue resends this machine's last one
+  for that bot. --save downloads files the bot produced into the current
+  directory. The chatbot must have API access turned on.`,
+  history: `baze history [--last N] [--kind image|video|speech|music|transcribe|bot] [--json]
+  Every gen and bot call from this machine, newest first, with its file paths,
+  credits when the gateway reports them, and request id. Kept in ~/.baze/history.jsonl.`,
   credits: 'baze credits [--json]\n  Monthly, purchased and org-granted balances, and the renewal date.',
   usage: `baze usage [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--by model|key|day] [--scope key|member] [--json]
   Gateway spend. --scope key (default) is the key in use; member is every key you own,
@@ -100,6 +128,11 @@ const USAGE: Record<string, string> = {
   doctor: 'baze doctor\n  Check Node, key, host, installed tools and conflicting config. Exits 1 if anything needs fixing.',
   update: 'baze update\n  npm install -g @mindlogic-ai/baze@latest',
   docs: 'baze docs\n  Print AGENT_MANUAL.md.',
+  skill: `baze skill [install|uninstall|status|show] [--dry-run]
+  Copy the baze skill into ~/.claude/skills/baze and ~/.codex/skills/baze for
+  whichever of the two is set up here, so the agent knows how to generate media,
+  ask chatbots and keep costs down. Install again after \`baze update\`; \`baze
+  doctor\` says when it is out of date.`,
 };
 
 async function dispatch(parsed: Parsed): Promise<number> {
@@ -130,6 +163,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/misc.js')).updateCommand();
     case 'docs':
       return (await import('./commands/misc.js')).docsCommand();
+    case 'skill':
+      return (await import('./commands/skill.js')).skillCommand(parsed);
     case '__update-check':
       return (await import('./commands/misc.js')).refreshUpdateMeta();
     case 'embed':
@@ -140,6 +175,12 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/guard.js')).guardCommand(parsed);
     case 'mcp':
       return (await import('./commands/mcp.js')).mcpCommand(parsed);
+    case 'gen':
+      return (await import('./commands/gen.js')).genCommand(parsed);
+    case 'bot':
+      return (await import('./commands/bot.js')).botCommand(parsed);
+    case 'history':
+      return (await import('./commands/history.js')).historyCommand(parsed);
     default:
       throw new CliError(`Unknown command: ${parsed.command}`, { hint: 'Run `baze --help` for the list.' });
   }
@@ -166,6 +207,12 @@ async function main(argv: string[]): Promise<number> {
   }
 
   const parsed = parseArgs(argv, knownFor(first));
+  const stray = claimStrayArgs(parsed, argv);
+  if (stray !== undefined) {
+    throw new CliError(`Unknown option ${stray} for baze ${parsed.command}.`, {
+      hint: `Run \`baze help ${parsed.command}\` for its options.`,
+    });
+  }
 
   if (parsed.flags.get('help') === true) {
     const usage = parsed.command ? USAGE[parsed.command] : undefined;
@@ -207,6 +254,7 @@ main(process.argv.slice(2))
     if (error instanceof CliError) {
       fail(error.message);
       if (error.hint) say(error.hint);
+      if (error.requestId) say(`request id: ${error.requestId}`);
       process.exitCode = error.exitCode;
       return;
     }

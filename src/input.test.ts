@@ -9,6 +9,7 @@ import { join } from 'node:path';
 const parsed = (positionals: string[], flags: Record<string, string> = {}) => ({
   command: 'embed',
   flags: new Map<string, string | true>(Object.entries(flags)),
+  lists: new Map<string, string[]>(),
   positionals,
   passthrough: [],
 });

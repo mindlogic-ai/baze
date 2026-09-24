@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import assert from 'node:assert/strict';
 import { catalogCachePath, fetchCatalogDetail, gatewayFetch, laneFor } from './api.js';
 
@@ -82,4 +84,117 @@ test('the server contract version rides along with the catalog, and an older ser
   const older = (async () => new Response(JSON.stringify({ object: 'list', data: [] }), { status: 200 })) as unknown as typeof fetch;
   const old = await fetchCatalogDetail('k', { base: 'https://older.test', force: true, fetchImpl: older });
   assert.equal(old.contract, undefined);
+});
+
+test('a gateway error carries the request id the gateway sent', async () => {
+  const fake = (async () =>
+    new Response(JSON.stringify({ detail: { code: 404, message: 'nope' } }), {
+      status: 404,
+      headers: { 'x-request-id': 'req-123' },
+    })) as unknown as typeof fetch;
+  await assert.rejects(
+    gatewayFetch('/models/x/', { apiKey: 'k', base: 'https://a.test', fetchImpl: fake }),
+    (e: Error & { requestId?: string }) => e.requestId === 'req-123',
+  );
+});
+
+test('a /v1/ path the gateway handed out goes to the same host, not under /v1/gateway', async () => {
+  const { gatewayFetchBytes } = await import('./api.js');
+  let url = '';
+  const fake = (async (u: string) => {
+    url = u;
+    return new Response(Buffer.from([1, 2]), { status: 200, headers: { 'content-type': 'video/mp4', 'x-request-id': 'r9' } });
+  }) as unknown as typeof fetch;
+  const got = await gatewayFetchBytes('/v1/gateway/video/generation/gw.a.b/download/?model=m', {
+    apiKey: 'k',
+    base: 'https://a.test/',
+    fetchImpl: fake,
+  });
+  assert.equal(url, 'https://a.test/v1/gateway/video/generation/gw.a.b/download/?model=m');
+  assert.deepEqual([...got.bytes], [1, 2]);
+  assert.equal(got.requestId, 'r9');
+});
+
+test('a provider download never carries the API key', async () => {
+  const { downloadPublic } = await import('./api.js');
+  let init: RequestInit | undefined;
+  const fake = (async (_u: string, i?: RequestInit) => {
+    init = i;
+    return new Response('x', { status: 200, headers: { 'content-type': 'image/png' } });
+  }) as unknown as typeof fetch;
+  await downloadPublic('https://cdn.provider.test/out.png', fake);
+  assert.equal(init?.headers, undefined);
+});
+
+test('a model list cached by an older baze is refetched, not trusted', async () => {
+  // Rows cached without `audioClient` and read back inside the TTL made
+  // `baze gen speech` say the key had no text-to-speech model.
+  process.env.BAZE_CONFIG_DIR = '/tmp/baze-cache-test';
+  const base = 'https://upgrade.test';
+  const file = catalogCachePath(base, 'k');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ at: Date.now(), rows: [{ id: 'tts', type: 'audio', lane: 'compat' }] }));
+  let calls = 0;
+  const fresh = (async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({ object: 'list', data: [{ id: 'tts', type: 'audio', audio_client: 'google' }] }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const first = await fetchCatalogDetail('k', { base, fetchImpl: fresh });
+  assert.equal(calls, 1);
+  assert.equal(first.rows[0]?.audioClient, 'google');
+  await fetchCatalogDetail('k', { base, fetchImpl: fresh });
+  assert.equal(calls, 1, 'its own cache is still used');
+});
+
+test('a request past its timeout fails with a message instead of hanging', async () => {
+  // A provider that never sends headers held `baze bot ask` open for 43 minutes.
+  const never = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as unknown as typeof fetch;
+  const { gatewayFetchJson } = await import('./api.js');
+  await assert.rejects(
+    gatewayFetchJson('/chatbots/1/chat/completions/', { apiKey: 'k', base: 'https://slow.test', fetchImpl: never, timeoutMs: 50 }),
+    /No answer from https:\/\/slow\.test after 0s/,
+  );
+});
+
+test('a provider download that stalls fails instead of hanging', async () => {
+  const { downloadPublic } = await import('./api.js');
+  const never = ((_url: string, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as unknown as typeof fetch;
+  await assert.rejects(downloadPublic('https://cdn.provider.test/v.mp4', never, 50), /No answer from cdn\.provider\.test/);
+});
+
+test('a body that stalls after the headers fails instead of hanging', async () => {
+  const { gatewayFetchBytes } = await import('./api.js');
+  const stalls = ((_url: string, init?: RequestInit) => {
+    const body = new ReadableStream({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+      },
+    });
+    return Promise.resolve(new Response(body, { status: 200 }));
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    gatewayFetchBytes('/audio/music/', { apiKey: 'k', base: 'https://slow.test', fetchImpl: stalls, timeoutMs: 50 }),
+    /No answer from https:\/\/slow\.test/,
+  );
+});
+
+test('a request with no timeout of its own still gets one', async () => {
+  // credits, usage and models set none; a stalled connection held them open.
+  const { gatewayFetch } = await import('./api.js');
+  let signal: AbortSignal | null | undefined;
+  const fake = (async (_u: string, init?: RequestInit) => {
+    signal = init?.signal;
+    return new Response('{}', { status: 200 });
+  }) as unknown as typeof fetch;
+  await gatewayFetch('/credits/', { apiKey: 'k', base: 'https://a.test', fetchImpl: fake });
+  assert.ok(signal instanceof AbortSignal, 'no abort signal on the request');
 });

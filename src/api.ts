@@ -8,6 +8,13 @@ import { CliError } from './ui.js';
 
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Bumped whenever `ModelRow` gains a field. The cache lives in the same
+ * directory across upgrades, so a list an older baze wrote (one without
+ * `audioClient`) must be refetched, not trusted for the rest of its TTL.
+ */
+const CATALOG_CACHE_VERSION = 2;
+
 interface GatewayErrorBody {
   error?: { message?: string };
   /**
@@ -49,27 +56,83 @@ export interface RawReply {
   status: number;
   contentType: string;
   text: string;
+  /** The gateway's X-Request-ID; absent on a gateway that does not send it yet. */
+  requestId?: string;
 }
 
+export interface BytesReply {
+  status: number;
+  contentType: string;
+  bytes: Buffer;
+  requestId?: string;
+  headers: Headers;
+}
+
+interface RequestOpts {
+  apiKey: string;
+  base?: string;
+  method?: string;
+  body?: unknown;
+  /** Multipart upload; the runtime sets the boundary, so no content-type here. */
+  form?: FormData;
+  headers?: Record<string, string>;
+  fetchImpl?: typeof fetch;
+  /**
+   * Give up after this long. Unset, a request gets DEFAULT_REQUEST_TIMEOUT_MS;
+   * work that can run for minutes (generation, a chatbot turn, an MCP tool
+   * call) sets its own.
+   */
+  timeoutMs?: number;
+}
+
+const requestIdOf = (res: Response): string | undefined => res.headers.get('x-request-id') ?? undefined;
+
+const isTimeout = (error: unknown): boolean => (error as Error)?.name === 'TimeoutError';
+
 /**
- * The authed request with the gateway's error mapping and no parsing of a
- * successful body. `gatewayFetch` is this plus JSON; the MCP relay (Task 19)
- * needs the text itself, because the suites answer as an SSE stream.
+ * A read or a short call answers in well under a second; a minute means the
+ * host is stuck, not busy. Without a bound a stalled connection held a command
+ * open indefinitely.
  */
-export async function gatewayFetchRaw(
-  path: string,
-  opts: {
-    apiKey: string;
-    base?: string;
-    method?: string;
-    body?: unknown;
-    headers?: Record<string, string>;
-    fetchImpl?: typeof fetch;
-  },
-): Promise<RawReply> {
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+/** Embed, rerank and guard carry up to thousands of inputs in one call. */
+export const BATCH_REQUEST_TIMEOUT_MS = 120_000;
+
+const timedOut = (where: string, timeoutMs: number | undefined): CliError =>
+  new CliError(`No answer from ${where} after ${Math.round((timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s.`, {
+    hint:
+      timeoutMs === undefined
+        ? 'The server may be overloaded; try again in a moment.'
+        : 'The request may still be running there; raise --timeout to wait longer.',
+  });
+
+/**
+ * A body read under the request's timeout. The signal also covers the body, so
+ * a stream that stalls after the headers ends here rather than hanging.
+ */
+async function readBody<T>(read: () => Promise<T>, where: string, timeoutMs: number | undefined): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isTimeout(error)) throw timedOut(where, timeoutMs);
+    throw new CliError(`The answer from ${where} was cut off.`, { hint: 'Check the network and retry.' });
+  }
+}
+
+/** A provider file download: a finished result, so a stall means the host is not coming back. */
+const DOWNLOAD_TIMEOUT_MS = 600_000;
+
+/**
+ * The authed request and the gateway's error mapping, before any reading of a
+ * successful body. Every error carries the request id when the gateway sent one.
+ */
+async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response> {
   const doFetch = opts.fetchImpl ?? fetch;
   const base = opts.base ?? apiBase();
-  const url = `${gatewayBase(base)}${path}`;
+  // An absolute gateway path (a download link the gateway itself handed out)
+  // goes to the same host; anything else is under /v1/gateway.
+  const url = path.startsWith('/v1/') ? `${base.replace(/\/+$/, '')}${path}` : `${gatewayBase(base)}${path}`;
   let res: Response;
   try {
     res = await doFetch(url, {
@@ -79,17 +142,19 @@ export async function gatewayFetchRaw(
         ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(opts.headers ?? {}),
       },
+      ...(opts.form !== undefined ? { body: opts.form } : {}),
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
     });
-  } catch {
+  } catch (error) {
+    if (isTimeout(error)) throw timedOut(base, opts.timeoutMs);
     // No status: callers treat this as "unreachable", not "refused".
     throw new CliError(`Could not reach ${base}.`, {
       hint: 'Check the network, or the host in --api-base / BAZE_API_BASE.',
     });
   }
-
-  const text = await res.text();
   if (!res.ok) {
+    const text = await res.text();
     let parsed: GatewayErrorBody | undefined;
     try {
       parsed = text ? (JSON.parse(text) as GatewayErrorBody) : undefined;
@@ -100,20 +165,75 @@ export async function gatewayFetchRaw(
       hint: hintFor(res.status),
       exitCode: res.status === 402 ? 2 : 1,
       status: res.status,
+      requestId: requestIdOf(res),
     });
   }
-  return { status: res.status, contentType: res.headers.get('content-type') ?? '', text };
+  return res;
 }
 
-export async function gatewayFetch<T>(
-  path: string,
-  opts: { apiKey: string; base?: string; method?: string; body?: unknown; fetchImpl?: typeof fetch },
-): Promise<T> {
-  const { text } = await gatewayFetchRaw(path, opts);
+/** A successful binary body (audio, a proxied video) with its headers. */
+export async function gatewayFetchBytes(path: string, opts: RequestOpts): Promise<BytesReply> {
+  const res = await gatewayRequest(path, opts);
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type') ?? '',
+    bytes: Buffer.from(await readBody(() => res.arrayBuffer(), opts.base ?? apiBase(), opts.timeoutMs)),
+    requestId: requestIdOf(res),
+    headers: res.headers,
+  };
+}
+
+/**
+ * A result file at a provider URL the gateway returned. No key goes with it:
+ * these are third-party hosts, and a signed URL carries its own credential.
+ */
+export async function downloadPublic(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = DOWNLOAD_TIMEOUT_MS,
+): Promise<{ bytes: Buffer; contentType: string }> {
+  const host = new URL(url).host;
+  let res: Response;
   try {
-    return (text ? JSON.parse(text) : undefined) as T;
+    res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (error) {
+    if (isTimeout(error)) throw timedOut(host, timeoutMs);
+    throw new CliError(`Could not download ${host}.`, { hint: 'Check the network and retry.' });
+  }
+  if (!res.ok) throw new CliError(`Download failed: ${host} answered HTTP ${res.status}.`);
+  const bytes = await readBody(() => res.arrayBuffer(), host, timeoutMs);
+  return { bytes: Buffer.from(bytes), contentType: res.headers.get('content-type') ?? '' };
+}
+
+/**
+ * The authed request with the gateway's error mapping and no parsing of a
+ * successful body. `gatewayFetch` is this plus JSON; the MCP relay (Task 19)
+ * needs the text itself, because the suites answer as an SSE stream.
+ */
+export async function gatewayFetchRaw(path: string, opts: RequestOpts): Promise<RawReply> {
+  const res = await gatewayRequest(path, opts);
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type') ?? '',
+    text: await readBody(() => res.text(), opts.base ?? apiBase(), opts.timeoutMs),
+    requestId: requestIdOf(res),
+  };
+}
+
+export async function gatewayFetch<T>(path: string, opts: RequestOpts): Promise<T> {
+  return (await gatewayFetchJson<T>(path, opts)).body;
+}
+
+/** JSON plus the request id, for commands that record or print it. */
+export async function gatewayFetchJson<T>(
+  path: string,
+  opts: RequestOpts,
+): Promise<{ body: T; requestId?: string }> {
+  const { text, requestId } = await gatewayFetchRaw(path, opts);
+  try {
+    return { body: (text ? JSON.parse(text) : undefined) as T, requestId };
   } catch {
-    return undefined as T;
+    return { body: undefined as T, requestId };
   }
 }
 
@@ -124,6 +244,7 @@ interface RawModel {
   endpoints?: string[] | null;
   context_limit?: number | null;
   max_output_tokens?: number | null;
+  audio_client?: string | null;
   /** USD per 1M tokens. Null for a model with no price row; each key optional. */
   pricing?: {
     input?: number | null;
@@ -166,6 +287,7 @@ function toRow(raw: RawModel): ModelRow {
     lane: laneFor(raw.endpoints),
     contextLimit: raw.context_limit ?? null,
     maxOutputTokens: raw.max_output_tokens ?? null,
+    ...(raw.type === 'audio' ? { audioClient: raw.audio_client ?? null } : {}),
     pricing: p
       ? {
           inputPer1mUsd: p.input ?? null,
@@ -204,15 +326,17 @@ export interface Catalog {
 
 export async function fetchCatalogDetail(
   apiKey: string,
-  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch } = {},
+  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<Catalog> {
   const base = opts.base ?? apiBase();
   ensureCacheDir();
   const file = catalogCachePath(base, apiKey);
   if (!opts.force && existsSync(file)) {
     try {
-      const cached = JSON.parse(readFileSync(file, 'utf8')) as { at: number; rows: ModelRow[]; contract?: number };
-      if (Date.now() - cached.at < CATALOG_TTL_MS) return { rows: cached.rows, contract: cached.contract };
+      const cached = JSON.parse(readFileSync(file, 'utf8')) as { v?: number; at: number; rows: ModelRow[]; contract?: number };
+      if (cached.v === CATALOG_CACHE_VERSION && Date.now() - cached.at < CATALOG_TTL_MS) {
+        return { rows: cached.rows, contract: cached.contract };
+      }
     } catch {
       // fall through and refetch
     }
@@ -221,11 +345,12 @@ export async function fetchCatalogDetail(
     apiKey,
     base,
     fetchImpl: opts.fetchImpl,
+    timeoutMs: opts.timeoutMs,
   });
   const catalog: Catalog = { rows: body.data.map(toRow) };
   if (typeof body.cli_contract === 'number') catalog.contract = body.cli_contract;
   try {
-    writeFileSync(file, JSON.stringify({ at: Date.now(), ...catalog }), { mode: 0o600 });
+    writeFileSync(file, JSON.stringify({ v: CATALOG_CACHE_VERSION, at: Date.now(), ...catalog }), { mode: 0o600 });
   } catch {
     // A read-only HOME must not break the command.
   }
@@ -234,7 +359,7 @@ export async function fetchCatalogDetail(
 
 export async function fetchCatalog(
   apiKey: string,
-  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch } = {},
+  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<ModelRow[]> {
   return (await fetchCatalogDetail(apiKey, opts)).rows;
 }

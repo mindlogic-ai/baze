@@ -1,9 +1,12 @@
-export type FlagKind = 'boolean' | 'value';
+/** `list`: repeatable, every occurrence kept in order (`--set a=1 --set b=2`). */
+export type FlagKind = 'boolean' | 'value' | 'list';
 export type KnownFlags = Readonly<Record<string, FlagKind>>;
 
 export interface Parsed {
   command?: string;
   flags: Map<string, string | true>;
+  /** Values of `list` flags, in the order given. */
+  lists: Map<string, string[]>;
   positionals: string[];
   passthrough: string[];
 }
@@ -16,6 +19,8 @@ export interface Parsed {
  */
 export function parseArgs(argv: string[], known: KnownFlags): Parsed {
   const flags = new Map<string, string | true>();
+  const lists = new Map<string, string[]>();
+  const push = (name: string, value: string) => lists.set(name, [...(lists.get(name) ?? []), value]);
   const positionals: string[] = [];
   let command: string | undefined;
   let i = 0;
@@ -41,12 +46,14 @@ export function parseArgs(argv: string[], known: KnownFlags): Parsed {
       }
 
       if (eq !== -1) {
-        flags.set(name, arg.slice(eq + 1));
+        if (kind === 'list') push(name, arg.slice(eq + 1));
+        else flags.set(name, arg.slice(eq + 1));
         continue;
       }
       const value = argv[i + 1];
       if (value === undefined) throw new Error(`--${name} needs a value`);
-      flags.set(name, value);
+      if (kind === 'list') push(name, value);
+      else flags.set(name, value);
       i++;
       continue;
     }
@@ -55,7 +62,7 @@ export function parseArgs(argv: string[], known: KnownFlags): Parsed {
     else positionals.push(arg);
   }
 
-  return { command, flags, positionals, passthrough: argv.slice(i) };
+  return { command, flags, lists, positionals, passthrough: argv.slice(i) };
 }
 
 export function hasFlag(args: readonly string[], flag: string): boolean {

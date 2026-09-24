@@ -1,7 +1,7 @@
 {
   "name": "@mindlogic-ai/baze",
   "version": "0.1.0",
-  "description": "Run Claude Code, Codex and OpenCode through the FactChat gateway; read models, credits and usage from a shell.",
+  "description": "Run Claude Code, Codex and OpenCode through the Baze gateway; generate images, video and audio, call studio chatbots, and read models, credits and usage from a shell.",
   "license": "UNLICENSED",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/**/*",
+    "skills/**/*",
     "README.md",
     "AGENT_MANUAL.md"
   ],
