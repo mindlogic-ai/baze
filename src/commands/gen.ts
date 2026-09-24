@@ -37,10 +37,10 @@ const QUICK_REQUEST_MS = 60_000;
  * paid call, so it is refused.
  */
 const KIND_FLAGS: Readonly<Record<Kind | 'wait', readonly string[]>> = {
-  image: ['set', 'image', 'n'],
-  video: ['set', 'image', 'no-wait'],
+  image: ['set', 'image', 'n', 'estimate'],
+  video: ['set', 'image', 'no-wait', 'estimate'],
   speech: ['voice'],
-  music: ['lyrics', 'seconds', 'instrumental'],
+  music: ['lyrics', 'seconds', 'instrumental', 'estimate'],
   transcribe: ['lang', 'no-diarize'],
   wait: [],
 };
@@ -113,8 +113,13 @@ async function paramSpecs(ctx: Ctx, model: string): Promise<ParamSpec[] | undefi
 const outputFlag = (ctx: Ctx): string | undefined =>
   str(ctx.parsed.flags.get('output')) ?? str(ctx.parsed.flags.get('o'));
 
+/** `--estimate`: price the call the other flags describe, and make none. */
+const estimating = (ctx: Ctx): boolean => ctx.parsed.flags.get('estimate') === true;
+
 function prompt(ctx: Ctx, what: string): string {
   const text = ctx.parsed.positionals.slice(1).join(' ').trim();
+  // The price never depends on the prompt, so a quote does not need one.
+  if (!text && estimating(ctx)) return '';
   if (!text) throw new CliError(`No ${what} given.`, { hint: `baze gen ${ctx.parsed.positionals[0]} "<${what}>" --model ID` });
   return text;
 }
@@ -196,6 +201,66 @@ function recordFailure(base: HistoryEntry, error: unknown): never {
   throw error;
 }
 
+// ---------------------------------------------------------------- estimate
+
+interface EstimateLine {
+  item: string;
+  credits: number;
+  exact: boolean;
+  basis: string;
+  note?: string;
+}
+
+interface EstimateReply {
+  object: 'estimate';
+  kind: string;
+  model: string;
+  credits: number;
+  exact: boolean;
+  lines: EstimateLine[];
+}
+
+/**
+ * The server prices the body with the function it bills with, so the quote
+ * and the charge cannot drift apart. Free: nothing is generated, reserved or
+ * recorded in history.
+ */
+async function showEstimate(ctx: Ctx, kind: 'image' | 'video' | 'music', body: Record<string, unknown>): Promise<number> {
+  // The price does not depend on the text; sending it would only cost bandwidth.
+  const { prompt: _prompt, lyrics: _lyrics, ...priced } = body;
+  let reply: EstimateReply;
+  let requestId: string | undefined;
+  try {
+    ({ body: reply, requestId } = await gatewayFetchJson<EstimateReply>('/estimate/', {
+      apiKey: ctx.apiKey,
+      method: 'POST',
+      body: { kind, ...priced },
+      timeoutMs: QUICK_REQUEST_MS,
+    }));
+  } catch (error) {
+    if (error instanceof CliError && error.status === 404 && error.message === 'Not Found') {
+      throw new CliError(`${ctx.host} cannot quote prices yet.`, {
+        hint: 'It runs an older Baze server; the price shows in `baze history` after the call.',
+      });
+    }
+    throw error;
+  }
+  if (ctx.json) {
+    out(JSON.stringify({ ...reply, request_id: requestId ?? null }, null, 2));
+    return 0;
+  }
+  const amount = formatCredits(reply.credits);
+  const main = reply.lines[0];
+  const qualifier = reply.exact ? '' : main?.note?.startsWith('Maximum') ? 'at most ' : 'at least ';
+  out(`${reply.model}: ${qualifier}${amount} credits`);
+  if (reply.lines.length > 1) {
+    for (const line of reply.lines) info(`  ${line.item}: ${formatCredits(line.credits)}`);
+  }
+  for (const line of reply.lines) if (line.note) info(c.dim(line.note));
+  info(c.dim('Nothing was generated or charged.'));
+  return 0;
+}
+
 // ---------------------------------------------------------------- image
 
 interface ImageReply {
@@ -230,6 +295,7 @@ async function genImage(ctx: Ctx): Promise<number> {
     number_of_images: count,
     ...(images.length ? { input_images: images } : {}),
   };
+  if (estimating(ctx)) return showEstimate(ctx, 'image', body);
   const base: HistoryEntry = {
     id: newHistoryId(), at: new Date().toISOString(), kind: 'image', model, status: 'submitted', host: ctx.host, prompt: text,
   };
@@ -322,6 +388,8 @@ async function genVideo(ctx: Ctx): Promise<number> {
   const specs = await paramSpecs(ctx, model);
   const parameters = checkParams(parseSets(ctx.parsed.lists.get('set') ?? []), specs, model);
   const images = (ctx.parsed.lists.get('image') ?? []).map(imageInput);
+  const body = { model, prompt: text, parameters, ...(images.length ? { input_urls: images } : {}) };
+  if (estimating(ctx)) return showEstimate(ctx, 'video', body);
 
   const base: HistoryEntry = {
     id: newHistoryId(), at: new Date().toISOString(), kind: 'video', model, status: 'submitted', host: ctx.host, prompt: text,
@@ -333,7 +401,7 @@ async function genVideo(ctx: Ctx): Promise<number> {
     ({ body: submitted, requestId } = await gatewayFetchJson<{ operation_id?: string }>('/video/generation/', {
       apiKey: ctx.apiKey,
       method: 'POST',
-      body: { model, prompt: text, parameters, ...(images.length ? { input_urls: images } : {}) },
+      body,
       timeoutMs: submitMs(ctx),
     }));
   } catch (error) {
@@ -395,6 +463,7 @@ async function genMusic(ctx: Ctx): Promise<number> {
     ...(seconds !== undefined ? { duration_seconds: Number(seconds) } : {}),
     ...(ctx.parsed.flags.get('instrumental') ? { instrumental: true } : {}),
   };
+  if (estimating(ctx)) return showEstimate(ctx, 'music', body);
   const base: HistoryEntry = {
     id: newHistoryId(), at: new Date().toISOString(), kind: 'music', model, status: 'submitted', host: ctx.host, prompt: text,
   };

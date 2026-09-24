@@ -52,6 +52,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, KnownFlags>> = {
     instrumental: 'boolean',
     lang: 'value',
     'no-diarize': 'boolean',
+    estimate: 'boolean',
   },
   bot: { ...GLOBAL, continue: 'boolean', save: 'boolean', timeout: 'value' },
   history: { ...GLOBAL, last: 'value', kind: 'value' },

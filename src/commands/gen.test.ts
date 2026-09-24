@@ -51,3 +51,56 @@ test("each kind's own options and the shared ones pass", () => {
   checkKindFlags('transcribe', parse('transcribe', 'f.wav', '--lang', 'ko', '--no-diarize', '--params'));
   checkKindFlags('wait', parse('wait', 'id', '--timeout', '60', '-o', 'v.mp4'));
 });
+
+function stubGateway(reply: (url: string, init?: RequestInit) => Response) {
+  const calls: { url: string; body?: unknown }[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    return reply(String(url), init);
+  }) as typeof fetch;
+  return { calls, restore: () => (globalThis.fetch = real) };
+}
+
+test('--estimate asks the server for a price and generates nothing', async () => {
+  process.env.BAZE_API_KEY = 'k';
+  process.env.BAZE_API_BASE = 'https://gen.test';
+  process.env.BAZE_CONFIG_DIR = (await import('node:fs')).mkdtempSync('/tmp/baze-est-');
+  const gw = stubGateway((url) =>
+    url.includes('/estimate/')
+      ? new Response(JSON.stringify({ object: 'estimate', kind: 'video', model: 'v', credits: 43.59, exact: true, lines: [{ item: 'video', credits: 43.59, exact: true, basis: 'price_schema' }] }))
+      : new Response(JSON.stringify({ parameters: [{ name: 'duration', values: [5, 10] }] })),
+  );
+  try {
+    const code = await genCommand(parse('video', 'a red ball', '--model', 'v', '--set', 'duration=10', '--estimate', '--json'));
+    assert.equal(code, 0);
+    const posts = gw.calls.filter((c) => c.body !== undefined);
+    assert.equal(posts.length, 1, 'only the estimate was posted');
+    assert.match(posts[0]!.url, /\/v1\/gateway\/estimate\/$/);
+    assert.deepEqual(posts[0]!.body, { kind: 'video', model: 'v', parameters: { duration: 10 } });
+    const { readHistory } = await import('../history.js');
+    assert.equal(readHistory().length, 0, 'a quote is not a job');
+  } finally {
+    gw.restore();
+  }
+});
+
+test('a server without estimates says so instead of "no such model"', async () => {
+  process.env.BAZE_API_KEY = 'k';
+  process.env.BAZE_API_BASE = 'https://old.test';
+  const gw = stubGateway((url) =>
+    url.includes('/estimate/')
+      ? new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 })
+      : new Response(JSON.stringify({})),
+  );
+  try {
+    await assert.rejects(genCommand(parse('music', '--model', 'lyria', '--estimate')), /cannot quote prices yet/);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('--estimate is refused for kinds that are not quoted', () => {
+  assert.throws(() => checkKindFlags('speech', parse('speech', 'hi', '--estimate')), /--estimate does not apply/);
+  assert.throws(() => checkKindFlags('transcribe', parse('transcribe', 'a.wav', '--estimate')), /--estimate does not apply/);
+});

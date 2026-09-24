@@ -94,9 +94,11 @@ baze gen music "<prompt>" --model ID [--lyrics "..."] [--seconds N] [--instrumen
 baze gen transcribe <audio file> [--model ID] [--lang ko,en] [--no-diarize] [-o file.txt]
 baze gen wait <history id>
 baze gen <kind> --model ID --params
+baze gen image|video|music ... --estimate
   Results are written to the current directory (or -o) and their paths printed
   on stdout. --set is checked against the model's parameters before anything is
-  sent; --params lists them. Local --image files are sent inline (up to 18 MB).
+  sent; --params lists them. --estimate prints what the call would charge, from
+  the server's own billing, and makes nothing. Local --image files are sent inline (up to 18 MB).
   A video is waited for (up to --timeout seconds, default 900); Ctrl-C is safe,
   \`baze gen wait\` resumes it. Every call is recorded in \`baze history\`.`,
   bot: `baze bot ask <chatbot id> "<question>" [--continue] [--save] [--timeout S] [--json]
