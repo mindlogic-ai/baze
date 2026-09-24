@@ -6,6 +6,7 @@ import type { Parsed } from '../args.js';
 import { CLI_CONTRACT, fetchCatalogDetail } from '../api.js';
 import { apiBase, loadStoredCredentials, resolveCredential } from '../config.js';
 import { claudeEnv } from '../harness/claude.js';
+import { readSkillSource, skillState, skillTargets } from './skill.js';
 import { c, fail, info, maskKey, ok, say, warn } from '../ui.js';
 
 export function claudeSettingsPath(): string {
@@ -135,6 +136,16 @@ export async function doctorCommand(_parsed: Parsed): Promise<number> {
     ['OpenCode', opencodeConfigPath()],
   ] as const) {
     if (existsSync(path)) ok(`${label} config: ${path}`);
+  }
+
+  // Advice, not a problem: baze works without the skill; the agent just does
+  // not know about `baze gen` and `baze bot`.
+  const skill = readSkillSource();
+  for (const target of skillTargets()) {
+    const state = skillState(target, skill);
+    if (state === 'current') ok(`baze skill for ${target.label}: ${target.file}`);
+    else if (state === 'missing') info(`baze skill for ${target.label}: not installed - \`baze skill install\` teaches it gen, bot and the cost rules.`);
+    else if (state === 'outdated') warn(`baze skill for ${target.label} is out of date - run \`baze skill install\`.`);
   }
 
   say('');

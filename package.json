@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/**/*",
+    "skills/**/*",
     "README.md",
     "AGENT_MANUAL.md"
   ],

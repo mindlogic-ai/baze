@@ -38,6 +38,7 @@ const HELP = `baze - run your coding agent through the Baze gateway. (v${VERSION
   baze setup <tool>          write the configuration permanently, with a backup
   baze doctor                check key, host, Node, tool versions, config conflicts
   baze env                   eval "$(baze env)" to export BAZE_API_KEY
+  baze skill install         teach Claude Code and Codex to use baze (gen, bot, costs)
   baze update | docs         upgrade baze; print the agent manual
 
 Global flags
@@ -125,6 +126,11 @@ baze bot chat <chatbot id> [--continue]
   doctor: 'baze doctor\n  Check Node, key, host, installed tools and conflicting config. Exits 1 if anything needs fixing.',
   update: 'baze update\n  npm install -g @mindlogic-ai/baze@latest',
   docs: 'baze docs\n  Print AGENT_MANUAL.md.',
+  skill: `baze skill [install|uninstall|status|show] [--dry-run]
+  Copy the baze skill into ~/.claude/skills/baze and ~/.codex/skills/baze for
+  whichever of the two is set up here, so the agent knows how to generate media,
+  ask chatbots and keep costs down. Install again after \`baze update\`; \`baze
+  doctor\` says when it is out of date.`,
 };
 
 async function dispatch(parsed: Parsed): Promise<number> {
@@ -155,6 +161,8 @@ async function dispatch(parsed: Parsed): Promise<number> {
       return (await import('./commands/misc.js')).updateCommand();
     case 'docs':
       return (await import('./commands/misc.js')).docsCommand();
+    case 'skill':
+      return (await import('./commands/skill.js')).skillCommand(parsed);
     case '__update-check':
       return (await import('./commands/misc.js')).refreshUpdateMeta();
     case 'embed':
