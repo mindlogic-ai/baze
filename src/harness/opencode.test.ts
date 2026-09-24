@@ -10,7 +10,8 @@ const ROWS: ModelRow[] = [
   { id: 'gpt-5.6-terra', type: 'llm', lane: 'responses', contextLimit: 1050000, pricing: null },
   { id: 'gemini-3.6-flash', type: 'llm', lane: 'gemini', contextLimit: 1000000, maxOutputTokens: 65536, pricing: null },
   { id: 'gemini-3.1-pro-preview', type: 'llm', lane: 'gemini', contextLimit: 1000000, pricing: null },
-  { id: 'deepseek-chat', type: 'llm', lane: 'compat', contextLimit: 64000, pricing: null },
+  { id: 'deepseek-chat', type: 'llm', lane: 'compat', contextLimit: 64000, maxOutputTokens: 8192, pricing: null },
+  { id: 'grok-4.7', type: 'llm', lane: 'compat', contextLimit: 500000, pricing: null },
   { id: 'dall-e', type: 'image', lane: 'compat', contextLimit: null, pricing: null },
 ];
 const OPTS = { apiKey: 'k', apiBase: 'https://a.test', model: 'claude-sonnet-5', rows: ROWS, passthrough: [] };
@@ -69,15 +70,16 @@ test('offline, a pinned model outside the fallback gets an entry on the lane its
   assert.ok(other.provider.baze?.models['deepseek-v4']);
 });
 
-test('the output limit is the catalog figure, and a conservative one when unknown', () => {
-  // OpenCode sends min(limit.output, 32000) as the request cap; an 8k model
-  // refuses a 32k request, so an unknown compat model gets 8192.
+test('the output limit is the catalog figure, and OpenCode\'s own 32000 when unknown', () => {
+  // An 8k model carries 8192 in the catalog; a model whose provider publishes
+  // no ceiling (Grok) must not be cut to 8k - it answers past 24k.
   const cfg = opencodeConfig(OPTS) as {
     provider: Record<string, { models: Record<string, { limit: { context: number; output: number } }> }>;
   };
   assert.equal(cfg.provider['baze-gemini']!.models['gemini-3.6-flash']!.limit.output, 65536);
   assert.equal(cfg.provider['baze-claude']!.models['claude-sonnet-5']!.limit.output, 32000);
   assert.equal(cfg.provider.baze!.models['deepseek-chat']!.limit.output, 8192);
+  assert.equal(cfg.provider.baze!.models['grok-4.7']!.limit.output, 32000);
 });
 
 test('the default model is namespaced by its own provider', () => {
