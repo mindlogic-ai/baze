@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseArgs } from '../args.js';
 import { knownFor } from '../flags.js';
-import { checkKindFlags, estimateHeadline, genCommand, parseTimeoutS } from './gen.js';
+import { chargedCredits, checkKindFlags, estimateHeadline, genCommand, parseTimeoutS } from './gen.js';
 
 const parse = (...argv: string[]) => parseArgs(['gen', ...argv], knownFor('gen'));
 
@@ -113,4 +113,75 @@ test('a server without estimates says so instead of "no such model"', async () =
 test('--estimate is refused for kinds that are not quoted', () => {
   assert.throws(() => checkKindFlags('speech', parse('speech', 'hi', '--estimate')), /--estimate does not apply/);
   assert.throws(() => checkKindFlags('transcribe', parse('transcribe', 'a.wav', '--estimate')), /--estimate does not apply/);
+});
+
+test('the charge is read from credits_charged, else the KRW billing block', () => {
+  assert.equal(chargedCredits({ credits_charged: 40 }), 40);
+  assert.equal(chargedCredits({ billing: { deducted_credit: 29.198 } }), 29.198);
+  assert.equal(chargedCredits({ credits_charged: 5, billing: { deducted_credit: 9 } }), 5);
+  assert.equal(chargedCredits({}), null);
+  assert.equal(chargedCredits(undefined), null);
+});
+
+async function freshHome(host: string) {
+  process.env.BAZE_API_KEY = 'k';
+  process.env.BAZE_API_BASE = host;
+  process.env.BAZE_CONFIG_DIR = (await import('node:fs')).mkdtempSync('/tmp/baze-charge-');
+  process.chdir(process.env.BAZE_CONFIG_DIR);
+  return (await import('../history.js')).readHistory;
+}
+
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+test('an image records what it was charged', async () => {
+  const readHistory = await freshHome('https://img.test');
+  const gw = stubGateway((url) =>
+    url.includes('/images/generate/')
+      ? new Response(JSON.stringify({ data: [{ url: PNG }], credits_charged: 40 }))
+      : new Response(JSON.stringify({ parameters: [] })),
+  );
+  try {
+    assert.equal(await genCommand(parse('image', 'a dot', '--model', 'flux', '--json')), 0);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'completed');
+    assert.equal(entry!.credits, 40);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('a video that failed keeps no charge in history; the server refunds it', async () => {
+  const readHistory = await freshHome('https://vid.test');
+  const gw = stubGateway((url, init) =>
+    url.includes('/video/generation/') && init?.method === 'POST'
+      ? new Response(JSON.stringify({ operation_id: 'op1', status: 'processing', credits_charged: 43.59 }))
+      : url.includes('/video/generation/op1/')
+        ? new Response(JSON.stringify({ operation_id: 'op1', status: 'failed', error: 'refused' }))
+        : new Response(JSON.stringify({ parameters: [] })),
+  );
+  try {
+    await assert.rejects(genCommand(parse('video', 'a cat', '--model', 'v')), /The video failed: refused/);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'failed');
+    assert.equal(entry!.credits, null);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('a video left running records its charge at submit', async () => {
+  const readHistory = await freshHome('https://vid2.test');
+  const gw = stubGateway((url) =>
+    url.includes('/video/generation/')
+      ? new Response(JSON.stringify({ operation_id: 'op2', status: 'processing', billing: { deducted_credit: 31.8185 } }))
+      : new Response(JSON.stringify({ parameters: [] })),
+  );
+  try {
+    assert.equal(await genCommand(parse('video', 'a cat', '--model', 'v', '--no-wait', '--json')), 0);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'processing');
+    assert.equal(entry!.credits, 31.8185);
+  } finally {
+    gw.restore();
+  }
 });

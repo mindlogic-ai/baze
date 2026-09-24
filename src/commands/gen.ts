@@ -278,7 +278,19 @@ async function showEstimate(ctx: Ctx, kind: 'image' | 'video' | 'music', body: R
 
 // ---------------------------------------------------------------- image
 
-interface ImageReply {
+/** What a submit says it deducted: `credits_charged` in every billing mode,
+ * else the KRW-mode `billing` block (servers before `credits_charged`). */
+interface ChargeReply {
+  credits_charged?: number | null;
+  billing?: { deducted_credit?: number } | null;
+}
+
+export function chargedCredits(reply: ChargeReply | undefined): number | null {
+  const amount = reply?.credits_charged ?? reply?.billing?.deducted_credit;
+  return typeof amount === 'number' && Number.isFinite(amount) ? amount : null;
+}
+
+interface ImageReply extends ChargeReply {
   operation_id?: string;
   status?: string;
   error?: string;
@@ -319,16 +331,18 @@ async function genImage(ctx: Ctx): Promise<number> {
     const { body: reply, requestId } = await gatewayFetchJson<ImageReply>('/images/generate/', {
       apiKey: ctx.apiKey, method: 'POST', body, timeoutMs: submitMs(ctx),
     });
+    // Charged at submit; a poll never charges again.
+    const credits = chargedCredits(reply);
     let final = reply;
     if (reply.operation_id && !reply.data) {
-      recordHistory({ ...base, at: new Date().toISOString(), status: 'processing', operationId: reply.operation_id, requestId });
+      recordHistory({ ...base, at: new Date().toISOString(), status: 'processing', operationId: reply.operation_id, credits, requestId });
       info(`Submitted; waiting (history ${base.id}).`);
       final = await pollImage(ctx, model, reply.operation_id);
     }
     if (!final.data?.length) throw new CliError(final.error ?? 'The gateway returned no image.');
     const files = await saveImages(final.data.map((d) => d.url), outputFlag(ctx), submitMs(ctx));
-    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files, requestId, operationId: reply.operation_id });
-    return finish(ctx, { kind: 'image', model, historyId: base.id, files, requestId, operationId: reply.operation_id });
+    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files, credits, requestId, operationId: reply.operation_id });
+    return finish(ctx, { kind: 'image', model, historyId: base.id, files, credits, requestId, operationId: reply.operation_id });
   } catch (error) {
     recordFailure(base, error);
   }
@@ -370,6 +384,9 @@ async function downloadVideo(ctx: Ctx, uri: string, output: string | undefined):
 }
 
 async function waitVideo(ctx: Ctx, base: HistoryEntry, operationId: string, requestId?: string): Promise<number> {
+  // The server refunds a job that failed with nothing delivered, so history
+  // must not keep its charge; a failed download keeps it.
+  let refunded = false;
   try {
     const status = await pollUntilDone(
       'The video',
@@ -381,19 +398,21 @@ async function waitVideo(ctx: Ctx, base: HistoryEntry, operationId: string, requ
       ctx.timeoutS,
     );
     if (status.status !== 'completed' || !status.video_uri) {
+      refunded = true;
       throw new CliError(`The video failed: ${status.error ?? status.status ?? 'no reason given'}.`, {
         hint: 'A job that fails after it was accepted is refunded automatically.',
       });
     }
     const file = await downloadVideo(ctx, status.video_uri, outputFlag(ctx));
-    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [file], operationId, requestId });
-    return finish(ctx, { kind: 'video', model: base.model, historyId: base.id, files: [file], operationId, requestId });
+    const credits = base.credits ?? null;
+    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [file], operationId, credits, requestId });
+    return finish(ctx, { kind: 'video', model: base.model, historyId: base.id, files: [file], operationId, credits, requestId });
   } catch (error) {
     if (error instanceof CliError && /still running/.test(error.message)) {
       // Not a failure: the job is alive and already paid for.
       throw new CliError(error.message, { hint: `Resume with \`baze gen wait ${base.id}\`.` });
     }
-    recordFailure(base, error);
+    recordFailure(refunded ? { ...base, credits: null } : base, error);
   }
 }
 
@@ -410,10 +429,10 @@ async function genVideo(ctx: Ctx): Promise<number> {
     id: newHistoryId(), at: new Date().toISOString(), kind: 'video', model, status: 'submitted', host: ctx.host, prompt: text,
   };
   recordHistory(base);
-  let submitted: { operation_id?: string };
+  let submitted: { operation_id?: string } & ChargeReply;
   let requestId: string | undefined;
   try {
-    ({ body: submitted, requestId } = await gatewayFetchJson<{ operation_id?: string }>('/video/generation/', {
+    ({ body: submitted, requestId } = await gatewayFetchJson<{ operation_id?: string } & ChargeReply>('/video/generation/', {
       apiKey: ctx.apiKey,
       method: 'POST',
       body,
@@ -424,12 +443,14 @@ async function genVideo(ctx: Ctx): Promise<number> {
   }
   const operationId = submitted.operation_id;
   if (!operationId) recordFailure(base, new CliError('The gateway accepted the video but returned no operation id.'));
-  const running: HistoryEntry = { ...base, at: new Date().toISOString(), status: 'processing', operationId, requestId };
+  // Video is charged at submit.
+  const credits = chargedCredits(submitted);
+  const running: HistoryEntry = { ...base, at: new Date().toISOString(), status: 'processing', operationId, credits, requestId };
   recordHistory(running);
 
   if (ctx.parsed.flags.get('no-wait')) {
     if (ctx.json) {
-      out(JSON.stringify({ kind: 'video', model, history_id: base.id, operation_id: operationId, status: 'processing', request_id: requestId ?? null }, null, 2));
+      out(JSON.stringify({ kind: 'video', model, history_id: base.id, operation_id: operationId, status: 'processing', credits, request_id: requestId ?? null }, null, 2));
     } else {
       out(base.id);
       info(`Submitted. Collect it with \`baze gen wait ${base.id}\`.`);
@@ -594,7 +615,7 @@ async function genWait(ctx: Ctx): Promise<number> {
       const final = await pollImage(ctx, entry.model, entry.operationId);
       const files = await saveImages((final.data ?? []).map((d) => d.url), outputFlag(ctx), submitMs(ctx));
       recordHistory({ ...entry, at: new Date().toISOString(), status: 'completed', files });
-      return finish(ctx, { kind: 'image', model: entry.model, historyId: entry.id, files, operationId: entry.operationId });
+      return finish(ctx, { kind: 'image', model: entry.model, historyId: entry.id, files, operationId: entry.operationId, credits: entry.credits, requestId: entry.requestId });
     } catch (error) {
       recordFailure(entry, error);
     }
