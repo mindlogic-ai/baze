@@ -14,7 +14,7 @@ Always pass `--json` and read stdout; stderr is for people. Exit `2` means out o
 ## Cost rules
 
 - Image, video and music take `--model`, and prices differ a hundredfold between models. List them with `baze models --type image|video|audio --json` and pick the one the user named, or ask. Do not pick the most expensive by default.
-- Before a video, music or a batch of images, run the same command with `--estimate --json` (free, no prompt needed) and tell the user the credits and the model. It is what the call will charge; when `exact` is false, the `note` says whether it is a minimum or a maximum.
+- Before a video, music or a batch of images, run the same command with `--estimate --json` (free, no prompt needed) and tell the user the credits and the model. It is what the call will charge. `bound` says how sure: `exact`, `minimum` (say "at least"), `maximum` ("at most") or `approximate` ("about"); pass on the `note` when there is one.
 - Check parameters first, it is free: `baze gen <kind> --model ID --params --json`. `baze gen` refuses a bad `--set` value locally, so a refused call costs nothing; fix it and retry.
 - Never loop a paid call on failure. A failure after the gateway accepted a job is refunded automatically; report the reason instead of retrying blindly.
 

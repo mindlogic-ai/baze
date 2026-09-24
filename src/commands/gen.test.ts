@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseArgs } from '../args.js';
 import { knownFor } from '../flags.js';
-import { checkKindFlags, genCommand, parseTimeoutS } from './gen.js';
+import { checkKindFlags, estimateHeadline, genCommand, parseTimeoutS } from './gen.js';
 
 const parse = (...argv: string[]) => parseArgs(['gen', ...argv], knownFor('gen'));
 
@@ -68,7 +68,7 @@ test('--estimate asks the server for a price and generates nothing', async () =>
   process.env.BAZE_CONFIG_DIR = (await import('node:fs')).mkdtempSync('/tmp/baze-est-');
   const gw = stubGateway((url) =>
     url.includes('/estimate/')
-      ? new Response(JSON.stringify({ object: 'estimate', kind: 'video', model: 'v', credits: 43.59, exact: true, lines: [{ item: 'video', credits: 43.59, exact: true, basis: 'price_schema' }] }))
+      ? new Response(JSON.stringify({ object: 'estimate', kind: 'video', model: 'v', credits: 43.59, exact: true, bound: 'exact', lines: [{ item: 'video', credits: 43.59, exact: true, bound: 'exact', basis: 'price_schema' }] }))
       : new Response(JSON.stringify({ parameters: [{ name: 'duration', values: [5, 10] }] })),
   );
   try {
@@ -83,6 +83,16 @@ test('--estimate asks the server for a price and generates nothing', async () =>
   } finally {
     gw.restore();
   }
+});
+
+test("the headline says which way the charge can move, as the server says", () => {
+  const quote = (bound: 'exact' | 'minimum' | 'maximum' | 'approximate') =>
+    estimateHeadline({ model: 'm', credits: 8, exact: bound === 'exact', bound });
+  assert.equal(quote('exact'), 'm: 8 credits');
+  assert.equal(quote('minimum'), 'm: at least 8 credits');
+  assert.equal(quote('maximum'), 'm: at most 8 credits');
+  // Own credit at another rate: it can land either side, so not "at least".
+  assert.equal(quote('approximate'), 'm: about 8 credits');
 });
 
 test('a server without estimates says so instead of "no such model"', async () => {

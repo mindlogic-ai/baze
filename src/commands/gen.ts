@@ -203,10 +203,14 @@ function recordFailure(base: HistoryEntry, error: unknown): never {
 
 // ---------------------------------------------------------------- estimate
 
+/** Where the charge lies against the quote; the server decides it. */
+type EstimateBound = 'exact' | 'minimum' | 'maximum' | 'approximate';
+
 interface EstimateLine {
   item: string;
   credits: number;
   exact: boolean;
+  bound: EstimateBound;
   basis: string;
   note?: string;
 }
@@ -217,7 +221,21 @@ interface EstimateReply {
   model: string;
   credits: number;
   exact: boolean;
+  bound: EstimateBound;
   lines: EstimateLine[];
+}
+
+const BOUND_WORDS: Record<EstimateBound, string> = {
+  exact: '',
+  minimum: 'at least ',
+  maximum: 'at most ',
+  approximate: 'about ',
+};
+
+/** "model: at least 8 credits". Read from `bound`, never from the note's words. */
+export function estimateHeadline(reply: Pick<EstimateReply, 'model' | 'credits' | 'exact' | 'bound'>): string {
+  const words = BOUND_WORDS[reply.bound] ?? (reply.exact ? '' : 'about ');
+  return `${reply.model}: ${words}${formatCredits(reply.credits)} credits`;
 }
 
 /**
@@ -249,10 +267,7 @@ async function showEstimate(ctx: Ctx, kind: 'image' | 'video' | 'music', body: R
     out(JSON.stringify({ ...reply, request_id: requestId ?? null }, null, 2));
     return 0;
   }
-  const amount = formatCredits(reply.credits);
-  const main = reply.lines[0];
-  const qualifier = reply.exact ? '' : main?.note?.startsWith('Maximum') ? 'at most ' : 'at least ';
-  out(`${reply.model}: ${qualifier}${amount} credits`);
+  out(estimateHeadline(reply));
   if (reply.lines.length > 1) {
     for (const line of reply.lines) info(`  ${line.item}: ${formatCredits(line.credits)}`);
   }
