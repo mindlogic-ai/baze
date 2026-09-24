@@ -36,6 +36,11 @@ export interface ModelRow {
    * gateway's only way to tell those apart, since all are `type: "audio"`.
    */
   audioClient?: string | null;
+  /**
+   * Priced per audio token (`gpt-audio-1.5`): OpenAI refuses such a call
+   * unless audio is on one side, so a text-only coding agent cannot use it.
+   */
+  audioTokens?: boolean;
   /** USD per 1M tokens at list price, newest `price` row - what the biller reads. */
   pricing: ModelPricing | null;
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { byLane, chatModels, FALLBACK_ROWS, launchRows, offlineLane, pickDefault } from './catalog.js';
+import { byLane, byType, chatModels, FALLBACK_ROWS, launchRows, offlineLane, pickDefault } from './catalog.js';
 import type { ModelRow } from './types.js';
 
 const row = (id: string, lane: ModelRow['lane']): ModelRow => ({
@@ -55,4 +55,13 @@ test('the offline fallback gives every tool a default in its own lane', () => {
   for (const tool of ['claude', 'codex', 'opencode'] as const) {
     assert.ok(pickDefault(tool, FALLBACK_ROWS), `${tool} has no fallback default`);
   }
+});
+
+test('an audio-token model is not offered to a coding agent', () => {
+  const rows: ModelRow[] = [
+    { ...row('gpt-audio-1.5', 'compat'), audioTokens: true },
+    row('glm-5.3', 'compat'),
+  ];
+  assert.deepEqual(chatModels(rows).map((r) => r.id), ['glm-5.3']);
+  assert.deepEqual(byType(rows, 'llm').map((r) => r.id), ['gpt-audio-1.5', 'glm-5.3'], '`baze models` still lists it');
 });

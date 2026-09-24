@@ -33,7 +33,12 @@ const LANE_FOR: Record<Tool, Lane[]> = {
 export const byType = (rows: ModelRow[], type: ModelType): ModelRow[] =>
   rows.filter((r) => r.type === type);
 
-export const chatModels = (rows: ModelRow[]): ModelRow[] => byType(rows, 'llm');
+/**
+ * What a coding agent can launch: text chat models. An audio-token model is
+ * `llm` in the catalog, but it answers only with audio on one side and every
+ * turn OpenCode sent it was a 400 (dev, 2026-09-24). `baze models` still lists it.
+ */
+export const chatModels = (rows: ModelRow[]): ModelRow[] => byType(rows, 'llm').filter((r) => !r.audioTokens);
 
 export const byLane = (rows: ModelRow[], lane: Lane): ModelRow[] =>
   chatModels(rows).filter((r) => r.lane === lane);
