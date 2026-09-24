@@ -91,10 +91,14 @@ export async function readArguments(parsed: Parsed): Promise<Record<string, unkn
 
 let nextId = 1;
 
+/** A tool call runs the connector (a search, a document fetch) and can take minutes. */
+const TOOL_CALL_TIMEOUT_MS = 600_000;
+
 async function rpc(apiKey: string, suite: string, method: string, params?: unknown): Promise<RpcResponse> {
   const reply = await gatewayFetchRaw(`/mcp/${encodeURIComponent(suite)}/`, {
     apiKey,
     method: 'POST',
+    ...(method === 'tools/call' ? { timeoutMs: TOOL_CALL_TIMEOUT_MS } : {}),
     body: { jsonrpc: '2.0', id: nextId++, method, ...(params === undefined ? {} : { params }) },
     headers: { accept: 'application/json, text/event-stream', 'mcp-protocol-version': PROTOCOL_VERSION },
   });

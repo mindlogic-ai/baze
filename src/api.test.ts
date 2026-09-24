@@ -186,3 +186,15 @@ test('a body that stalls after the headers fails instead of hanging', async () =
     /No answer from https:\/\/slow\.test/,
   );
 });
+
+test('a request with no timeout of its own still gets one', async () => {
+  // credits, usage and models set none; a stalled connection held them open.
+  const { gatewayFetch } = await import('./api.js');
+  let signal: AbortSignal | null | undefined;
+  const fake = (async (_u: string, init?: RequestInit) => {
+    signal = init?.signal;
+    return new Response('{}', { status: 200 });
+  }) as unknown as typeof fetch;
+  await gatewayFetch('/credits/', { apiKey: 'k', base: 'https://a.test', fetchImpl: fake });
+  assert.ok(signal instanceof AbortSignal, 'no abort signal on the request');
+});

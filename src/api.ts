@@ -77,7 +77,11 @@ interface RequestOpts {
   form?: FormData;
   headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
-  /** Give up after this long. A provider that never answers otherwise hangs the command forever. */
+  /**
+   * Give up after this long. Unset, a request gets DEFAULT_REQUEST_TIMEOUT_MS;
+   * work that can run for minutes (generation, a chatbot turn, an MCP tool
+   * call) sets its own.
+   */
   timeoutMs?: number;
 }
 
@@ -85,9 +89,22 @@ const requestIdOf = (res: Response): string | undefined => res.headers.get('x-re
 
 const isTimeout = (error: unknown): boolean => (error as Error)?.name === 'TimeoutError';
 
+/**
+ * A read or a short call answers in well under a second; a minute means the
+ * host is stuck, not busy. Without a bound a stalled connection held a command
+ * open indefinitely.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
+/** Embed, rerank and guard carry up to thousands of inputs in one call. */
+export const BATCH_REQUEST_TIMEOUT_MS = 120_000;
+
 const timedOut = (where: string, timeoutMs: number | undefined): CliError =>
-  new CliError(`No answer from ${where} after ${Math.round((timeoutMs ?? 0) / 1000)}s.`, {
-    hint: 'The request may still be running there; raise --timeout to wait longer.',
+  new CliError(`No answer from ${where} after ${Math.round((timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)}s.`, {
+    hint:
+      timeoutMs === undefined
+        ? 'The server may be overloaded; try again in a moment.'
+        : 'The request may still be running there; raise --timeout to wait longer.',
   });
 
 /**
@@ -127,7 +144,7 @@ async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response
       },
       ...(opts.form !== undefined ? { body: opts.form } : {}),
       ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
-      ...(opts.timeoutMs !== undefined ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {}),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     if (isTimeout(error)) throw timedOut(base, opts.timeoutMs);
@@ -309,7 +326,7 @@ export interface Catalog {
 
 export async function fetchCatalogDetail(
   apiKey: string,
-  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch } = {},
+  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<Catalog> {
   const base = opts.base ?? apiBase();
   ensureCacheDir();
@@ -328,6 +345,7 @@ export async function fetchCatalogDetail(
     apiKey,
     base,
     fetchImpl: opts.fetchImpl,
+    timeoutMs: opts.timeoutMs,
   });
   const catalog: Catalog = { rows: body.data.map(toRow) };
   if (typeof body.cli_contract === 'number') catalog.contract = body.cli_contract;
@@ -341,7 +359,7 @@ export async function fetchCatalogDetail(
 
 export async function fetchCatalog(
   apiKey: string,
-  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch } = {},
+  opts: { force?: boolean; base?: string; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<ModelRow[]> {
   return (await fetchCatalogDetail(apiKey, opts)).rows;
 }
