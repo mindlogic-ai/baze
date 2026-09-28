@@ -24,3 +24,12 @@ test('nudges only when the latest version differs', () => {
   assert.equal(updateNudge('0.1.0', '0.1.0'), undefined);
   assert.match(String(updateNudge('0.1.0', '0.2.0')), /0\.2\.0/);
 });
+
+test('the env hint names the startup file of the shell in use', async () => {
+  // bash users were told to edit ~/.zshrc.
+  const { shellRcFile } = await import('./setup.js');
+  assert.equal(shellRcFile('/bin/bash'), '~/.bashrc');
+  assert.equal(shellRcFile('/opt/homebrew/bin/zsh'), '~/.zshrc');
+  assert.equal(shellRcFile('/usr/bin/fish'), '~/.config/fish/config.fish');
+  assert.equal(shellRcFile(''), 'your shell startup file');
+});

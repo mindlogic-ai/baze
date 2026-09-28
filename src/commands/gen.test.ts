@@ -259,3 +259,19 @@ test('an async image interrupted mid-poll keeps its operation id for gen wait', 
     gw.restore();
   }
 });
+
+test('--seconds on a Lyria model is refused before anything is paid for', async () => {
+  const readHistory = await freshHome('https://lyria.test');
+  const gw = stubGateway((url) =>
+    url.includes('/models/')
+      ? new Response(JSON.stringify({ data: [{ id: 'lyria-3-pro-preview', type: 'audio', audio_client: 'google_lyria3' }] }))
+      : new Response('{}', { status: 400 }),
+  );
+  try {
+    await assert.rejects(genCommand(parse('music', 'a song', '--model', 'lyria-3-pro-preview', '--seconds', '30')), /picks its own length/);
+    assert.equal(gw.calls.some((c) => c.url.includes('/audio/music/')), false);
+    assert.deepEqual(readHistory(), []);
+  } finally {
+    gw.restore();
+  }
+});

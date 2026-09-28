@@ -63,7 +63,7 @@ baze claude --dry-run          # print the plan, start nothing
 | Codex (`baze codex`) | OpenAI Responses | GPT models only |
 | OpenCode (`baze opencode`) | Anthropic, Responses, Gemini and OpenAI-compatible providers | Every chat model this key can call, each on its native lane |
 
-`baze models` shows the lane of every model. `--model` accepts a full id or a unique prefix.
+`baze models` shows the lane of every model. `--model` takes the full id as `baze models` prints it.
 
 ## Generate images, video, speech and music
 
@@ -98,7 +98,12 @@ baze setup codex
 baze setup opencode
 ```
 
-`setup` rewrites the tool's user-level configuration so a plain `claude`, `codex` or `opencode` uses the gateway. The previous file is backed up first, and the command prints the backup path. **The written file holds your API key in plain text.** It is the user-level file, not a project one, so it is not committed, but on a shared machine prefer the launcher commands, which leave nothing behind. `--dry-run` prints the file without writing it.
+`setup` rewrites the tool's user-level configuration so a plain `claude`, `codex` or `opencode` uses the gateway. The previous file is backed up first, and the command prints the backup path. `--dry-run` prints the file without writing it.
+
+Where the key ends up differs by tool:
+
+- **Claude Code**: `~/.claude/settings.json` holds the key in plain text, because Claude Code reads it only from there or the environment. It is the user-level file, not a project one, so it is not committed, but on a shared machine prefer `baze claude`, which leaves nothing behind.
+- **Codex and OpenCode**: the config names the `BAZE_API_KEY` variable and holds no key. Put `eval "$(baze env)"` in your shell's startup file, or use `baze codex` / `baze opencode`, which need no variable.
 
 ## Commands
 

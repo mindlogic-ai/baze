@@ -103,7 +103,7 @@ baze codex   [--model ID] [--reasoning-effort low|medium|high|max] [--dry-run] [
 baze opencode [--model ID] [--dry-run] [<opencode args>]
 ```
 
-`--model` takes a full id or a unique prefix and must be on a lane the tool speaks (Claude Code: `anthropic`; Codex: `responses`; OpenCode: any). Nothing is written to disk. `--dry-run` prints the launch plan (binary, arguments, environment with the key masked) to stderr and exits `0` without starting the tool.
+`--model` takes a full id and must be on a lane the tool speaks (Claude Code: `anthropic`; Codex: `responses`; OpenCode: any). Nothing is written to disk. `--dry-run` prints the launch plan (binary, arguments, environment with the key masked) to stderr and exits `0` without starting the tool.
 
 Unattended examples:
 
@@ -113,7 +113,7 @@ baze codex exec --json "summarize the diff"
 baze opencode run "explain src/index.ts"
 ```
 
-`baze setup <claude|codex|opencode> [--model ID] [--dry-run]` writes the tool's user-level config permanently, backing up the old file; the file then holds the key in plain text. Prefer the launchers in automation.
+`baze setup <claude|codex|opencode> [--model ID] [--dry-run]` writes the tool's user-level config permanently, backing up the old file. For Claude Code that file holds the key in plain text; the Codex and OpenCode configs name `BAZE_API_KEY` and hold no key. Prefer the launchers in automation.
 
 ## Lanes
 

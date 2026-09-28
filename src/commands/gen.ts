@@ -524,12 +524,31 @@ async function genSpeech(ctx: Ctx): Promise<number> {
   }
 }
 
+const LYRIA_ENGINE = 'google_lyria3';
+
+/** The music row's engine (`audio_client`), or undefined when the catalog cannot say. */
+async function musicEngine(ctx: Ctx, model: string): Promise<string | undefined> {
+  try {
+    return byType(await fetchCatalog(ctx.apiKey), 'audio').find((r) => r.id === model)?.audioClient ?? undefined;
+  } catch {
+    // The gateway checks it anyway.
+    return undefined;
+  }
+}
+
 async function genMusic(ctx: Ctx): Promise<number> {
   const model = requireModel(ctx, 'music');
   const text = prompt(ctx, 'prompt');
   const lyrics = str(ctx.parsed.flags.get('lyrics'));
   const seconds = str(ctx.parsed.flags.get('seconds'));
   if (seconds !== undefined && !(Number(seconds) > 0)) throw new CliError('--seconds must be a positive number.');
+  if (seconds !== undefined && (await musicEngine(ctx, model)) === LYRIA_ENGINE) {
+    // The gateway refuses it (400, nothing charged); saying so here costs no
+    // round trip and leaves no failed job in history.
+    throw new CliError(`${model} picks its own length; --seconds does not apply.`, {
+      hint: 'Drop --seconds, or use elevenlabs-music / elevenlabs-sfx, which take one.',
+    });
+  }
   const body = {
     model,
     prompt: text,

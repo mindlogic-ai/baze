@@ -98,3 +98,18 @@ test('every provider reads the key from the env var, not from a literal', () => 
   const cfg = opencodeConfig(OPTS) as { provider: Record<string, { options: { apiKey: string } }> };
   for (const p of Object.values(cfg.provider)) assert.equal(p.options.apiKey, '{env:BAZE_API_KEY}');
 });
+
+test("the small model comes from the main model's family when the key has one", () => {
+  // A GPT user found Claude Haiku rows in usage for session titles (dev QA, 2026-09-28).
+  const rows: ModelRow[] = [
+    ...ROWS,
+    { id: 'gpt-5.4-mini', type: 'llm', lane: 'responses', contextLimit: 400000, pricing: null },
+    { id: 'gemini-3.5-flash-lite', type: 'llm', lane: 'gemini', contextLimit: 1000000, pricing: null },
+  ];
+  const small = (model: string) => (opencodeConfig({ ...OPTS, rows, model }) as { small_model: string }).small_model;
+  assert.equal(small('gpt-5.6-terra'), 'baze-openai/gpt-5.4-mini');
+  assert.equal(small('gemini-3.1-pro-preview'), 'baze-gemini/gemini-3.5-flash-lite');
+  assert.equal(small('claude-sonnet-5'), 'baze-claude/claude-haiku-4-5-20251001');
+  // No small model in that family: the general preference list.
+  assert.equal(small('grok-4.7'), 'baze-claude/claude-haiku-4-5-20251001');
+});

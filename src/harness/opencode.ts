@@ -32,6 +32,17 @@ const UNKNOWN_OUTPUT: Record<Lane, number> = { anthropic: 32000, responses: 3200
 // Following GenCode: titles and summaries on a small model, and sub-agents on
 // a flash-class model with a step cap rather than on the primary.
 const SMALL_PREFERRED = ['claude-haiku-4-5-20251001', 'gemini-3.5-flash-lite', 'gpt-5.4-mini'];
+/**
+ * OpenCode's small model titles sessions and summarises. It is taken from the
+ * main model's own family first: a GPT user found Claude Haiku rows in their
+ * usage for titles they never asked for (dev QA, 2026-09-28).
+ */
+const SMALL_BY_LANE: Record<Lane, string[]> = {
+  anthropic: ['claude-haiku-4-5-20251001'],
+  responses: ['gpt-5.4-mini', 'gpt-5.4-nano'],
+  gemini: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'],
+  compat: [],
+};
 const SUBAGENT_PREFERRED = ['gemini-3.6-flash', 'gemini-3.5-flash', 'claude-haiku-4-5-20251001'];
 const SUBAGENT_STEPS = { explore: 100, general: 200 } as const;
 
@@ -107,7 +118,8 @@ export function opencodeConfig(o: HarnessOptions): unknown {
   const config: Record<string, unknown> = { $schema: 'https://opencode.ai/config.json', provider };
   if (o.model) config.model = ref(o.model);
 
-  const small = pickFirst(SMALL_PREFERRED, rows);
+  const mainLane = o.model ? chatModels(rows).find((r) => r.id === o.model)?.lane : undefined;
+  const small = (mainLane && pickFirst(SMALL_BY_LANE[mainLane], rows)) || pickFirst(SMALL_PREFERRED, rows);
   if (small) config.small_model = ref(small);
   const sub = pickFirst(SUBAGENT_PREFERRED, rows);
   if (sub) {
