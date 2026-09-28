@@ -1,6 +1,8 @@
+import { chatModels, launchRows } from '../catalog.js';
 import { ENV_KEY_NAME } from '../config.js';
 import { gatewayBase } from '../hosts.js';
-import type { LaunchPlan } from '../types.js';
+import type { LaunchPlan, ModelRow } from '../types.js';
+import { CliError } from '../ui.js';
 import type { HarnessOptions } from './claude.js';
 
 export const CODEX_PROVIDER_ID = 'baze';
@@ -40,7 +42,27 @@ export function codexOverrides(o: HarnessOptions): string[] {
   return overrides.flatMap((entry) => ['-c', entry]);
 }
 
+/**
+ * Codex speaks only the Responses API. A typo or a model served on another
+ * lane used to launch anyway and fail on the first turn, after the session
+ * had started (dev QA, 2026-09-28); Claude Code and OpenCode already refused
+ * before launching.
+ */
+export function assertCodexModel(model: string, rows: ModelRow[]): void {
+  const row = chatModels(rows).find((r) => r.id === model);
+  if (!row) {
+    throw new CliError(`${model} is not available to this key.`, {
+      hint: 'Run `baze models` to see the models it can call; Codex runs the Responses ones.',
+    });
+  }
+  if (row.lane === 'responses') return;
+  throw new CliError(`Codex cannot run ${model}.`, {
+    hint: 'Codex sends every turn to the Responses API, which serves GPT models only. Run Claude with `baze claude` and anything else with `baze opencode`.',
+  });
+}
+
 export function buildCodexPlan(o: HarnessOptions): LaunchPlan {
+  if (o.model) assertCodexModel(o.model, launchRows(o.rows, o.model, o.catalogLive !== false));
   return {
     bin: 'codex',
     args: [...codexOverrides(o), ...o.passthrough],

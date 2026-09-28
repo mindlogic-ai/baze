@@ -38,3 +38,19 @@ test('the key is in env, not in argv', () => {
   assert.equal(plan.env.BAZE_API_KEY, 'k');
   assert.equal(plan.args.join(' ').includes('"k"'), false);
 });
+
+test('a model Codex cannot run is refused before launch, not on the first turn', () => {
+  const rows: ModelRow[] = [
+    ...ROWS,
+    { id: 'claude-sonnet-5', type: 'llm', lane: 'anthropic', contextLimit: null, pricing: null },
+  ];
+  assert.throws(() => buildCodexPlan({ ...OPTS, rows, model: 'claude-sonnet-5' }), /Codex cannot run claude-sonnet-5/);
+  assert.throws(() => buildCodexPlan({ ...OPTS, rows, model: 'gpt-5.6-terr' }), /gpt-5.6-terr is not available/);
+  assert.equal(buildCodexPlan({ ...OPTS, rows }).bin, 'codex');
+});
+
+test('offline, an unlisted GPT model is admitted in the lane its family implies', () => {
+  const plan = buildCodexPlan({ ...OPTS, rows: [], catalogLive: false, model: 'gpt-6-sol' });
+  assert.match(plan.args.join(' '), /model="gpt-6-sol"/);
+  assert.throws(() => buildCodexPlan({ ...OPTS, rows: [], catalogLive: false, model: 'gemini-3.1-pro-preview' }), /Codex cannot run/);
+});
