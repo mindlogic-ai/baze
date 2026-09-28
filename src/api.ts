@@ -13,7 +13,7 @@ const CATALOG_TTL_MS = 10 * 60 * 1000;
  * directory across upgrades, so a list an older baze wrote (one without
  * `audioClient`) must be refetched, not trusted for the rest of its TTL.
  */
-const CATALOG_CACHE_VERSION = 2;
+const CATALOG_CACHE_VERSION = 3;
 
 interface GatewayErrorBody {
   error?: { message?: string };
@@ -252,6 +252,8 @@ interface RawModel {
     cache_read?: number | null;
     cache_write?: number | null;
     cache_write_1h?: number | null;
+    audio_input?: number | null;
+    audio_output?: number | null;
   } | null;
 }
 
@@ -287,6 +289,7 @@ function toRow(raw: RawModel): ModelRow {
     lane: laneFor(raw.endpoints),
     contextLimit: raw.context_limit ?? null,
     maxOutputTokens: raw.max_output_tokens ?? null,
+    ...(p?.audio_input != null || p?.audio_output != null ? { audioTokens: true } : {}),
     ...(raw.type === 'audio' ? { audioClient: raw.audio_client ?? null } : {}),
     pricing: p
       ? {

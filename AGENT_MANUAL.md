@@ -152,7 +152,7 @@ Result:
   "files": [ "/absolute/path/of/each/result" ],
   "operation_id": "…",            // video, transcribe, async image
   "text": "…",                    // transcribe only; also "segments": [ … ]
-  "credits": 40 | null,           // null when the gateway does not report a charge on this lane
+  "credits": 40 | null,           // what the call deducted; null only from a server that does not report it (a failed video: refunded)
   "request_id": "…" | null
 }
 ```

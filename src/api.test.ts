@@ -198,3 +198,21 @@ test('a request with no timeout of its own still gets one', async () => {
   await gatewayFetch('/credits/', { apiKey: 'k', base: 'https://a.test', fetchImpl: fake });
   assert.ok(signal instanceof AbortSignal, 'no abort signal on the request');
 });
+
+test('an audio-token model is marked from its pricing', async () => {
+  process.env.BAZE_CONFIG_DIR = '/tmp/baze-audio-tokens-test';
+  const fake = (async () =>
+    new Response(
+      JSON.stringify({
+        object: 'list',
+        data: [
+          { id: 'gpt-audio-1.5', type: 'llm', endpoints: ['/v1/gateway/chat/completions/'], pricing: { input: 2.5, output: 10, audio_input: 32, audio_output: 64 } },
+          { id: 'glm-5.3', type: 'llm', endpoints: ['/v1/gateway/chat/completions/'], pricing: { input: 1, output: 3 } },
+        ],
+      }),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+  const { rows } = await fetchCatalogDetail('k', { base: 'https://audio-tokens.test', fetchImpl: fake });
+  assert.equal(rows.find((r) => r.id === 'gpt-audio-1.5')?.audioTokens, true);
+  assert.equal(rows.find((r) => r.id === 'glm-5.3')?.audioTokens, undefined);
+});

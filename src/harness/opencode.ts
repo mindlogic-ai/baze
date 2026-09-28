@@ -69,6 +69,11 @@ function modelEntry(m: ModelRow): Record<string, unknown> {
  */
 function rowsFor(o: HarnessOptions): ModelRow[] {
   const live = o.catalogLive !== false;
+  if (live && o.model && o.rows.some((r) => r.id === o.model && r.audioTokens)) {
+    throw new CliError(`${o.model} answers only with audio, so a coding agent cannot use it.`, {
+      hint: 'Call it through the chat completions API with audio input or output.',
+    });
+  }
   if (live && o.model && !chatModels(o.rows).some((r) => r.id === o.model)) {
     throw new CliError(`${o.model} is not available to this key.`, {
       hint: 'Run `baze models` to see what it can call.',
