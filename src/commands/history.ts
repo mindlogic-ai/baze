@@ -1,9 +1,27 @@
 import { relative } from 'node:path';
 import type { Parsed } from '../args.js';
 import { historyPath, readHistory } from '../history.js';
-import { c, CliError, info, out, say } from '../ui.js';
+import { CliError, cOut, fit, formatCredits, info, out, say, shortPath, termWidth } from '../ui.js';
 
-const STATUS_COLOR = { completed: c.green, failed: c.red, processing: c.yellow, submitted: c.yellow } as const;
+const STATUS_GLYPH: Record<string, string> = { completed: '✔', failed: '✘', processing: '◷', submitted: '◷' };
+const STATUS_MARK: Record<string, (s: string) => string> = {
+  completed: cOut.green,
+  failed: cOut.red,
+  processing: cOut.yellow,
+  submitted: cOut.yellow,
+};
+
+/** Relative to here when under it, else ~-shortened; --json keeps paths absolute. */
+function shown(p: string): string {
+  const rel = relative(process.cwd(), p);
+  return rel.startsWith('..') ? shortPath(p) : rel;
+}
+
+/** Cut a path from the left so the file name stays visible. */
+function fitPath(s: string, width: number): string {
+  if (s.length <= width || width < 8) return fit(s, Math.max(width, 0));
+  return s.includes('/') ? `…${s.slice(s.length - width + 1)}` : fit(s, width);
+}
 
 export async function historyCommand(parsed: Parsed): Promise<number> {
   const rawLast = parsed.flags.get('last');
@@ -37,15 +55,26 @@ export async function historyCommand(parsed: Parsed): Promise<number> {
     say('Nothing yet. `baze gen` and `baze bot ask` record every call here.');
     return 0;
   }
-  for (const e of rows) {
-    const status = (STATUS_COLOR[e.status] ?? ((s: string) => s))(e.status.padEnd(10));
+  // One fixed shape per line, fitted to the terminal: the model column is
+  // padded, credits sit right-aligned, and paths are shortened - a full temp
+  // path pushed every line past 150 characters (feedback, 2026-09-28).
+  const modelWidth = Math.min(28, Math.max(...rows.map((e) => e.model.length)));
+  const credits = rows.map((e) => (typeof e.credits === 'number' ? `${formatCredits(e.credits)} cr` : '-'));
+  const creditWidth = Math.max(...credits.map((s) => s.length));
+  rows.forEach((e, i) => {
+    const glyph = (STATUS_MARK[e.status] ?? cOut.dim)(STATUS_GLYPH[e.status] ?? '?');
     const at = new Date(e.at);
-    const when = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
-    // Paths relative to here when they are under it; --json keeps them absolute.
-    const shown = (p: string) => (relative(process.cwd(), p).startsWith('..') ? p : relative(process.cwd(), p));
-    const what = e.files?.length ? e.files.map(shown).join(', ') : (e.error ?? e.prompt ?? '').replace(/\s+/g, ' ').slice(0, 60);
-    out(`${e.id}  ${when}  ${e.kind.padEnd(10)} ${status} ${e.model}  ${what}`);
-  }
+    const when = `${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    const head = `${glyph} ${e.id}  ${when}  ${e.kind.padEnd(10)} ${fit(e.model, modelWidth).padEnd(modelWidth)}  ${credits[i]!.padStart(creditWidth)}  `;
+    const what = e.files?.length
+      ? e.files.map(shown).join(', ')
+      : e.status === 'processing' || e.status === 'submitted'
+        ? `${e.status} · baze gen wait ${e.id}`
+        : (e.error ?? e.prompt ?? '').replace(/\s+/g, ' ');
+    // The glyph is one character on screen however long its color codes are.
+    const room = termWidth() - (head.length - glyph.length + 1);
+    out(`${head}${cOut.dim(fitPath(what, room))}`);
+  });
   info('');
   info(`Resume an unfinished job with \`baze gen wait <id>\`. Full records: --json  (${historyPath()})`);
   return 0;
