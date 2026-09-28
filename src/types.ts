@@ -1,13 +1,13 @@
 export type Lane = 'anthropic' | 'responses' | 'gemini' | 'compat';
 /**
  * Every `type` `/v1/gateway/models/` can send. `embedding` and `rerank` joined
- * the list when Step 3 shipped their endpoints, `realtime` (live voice, PR
- * #4841) after that; `baze` serves chat only, so `chatModels()` drops them -
+ * the list when Step 3 shipped their endpoints, `decisions` (TypeSafe Jev) with
+ * Step 3.4 and `realtime` (live voice, PR #4841) after that; `baze` serves chat only, so `chatModels()` drops them -
  * but the type has to describe the wire, or the next reader assumes a catalog
  * row is always launchable. Two revisions (R7-5, R9-2) added a type here after
  * the server did; `cli_contract` (api.ts) now makes that drift visible.
  */
-export type ModelType = 'llm' | 'audio' | 'image' | 'video' | 'embedding' | 'rerank' | 'realtime';
+export type ModelType = 'llm' | 'audio' | 'image' | 'video' | 'embedding' | 'rerank' | 'decisions' | 'realtime';
 
 export interface ModelPricing {
   /**

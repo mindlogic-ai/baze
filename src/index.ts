@@ -66,9 +66,11 @@ const USAGE: Record<string, string> = {
   use it for a key that may have leaked.`,
   auth: 'baze auth\n  Show the masked key, where it came from, and the host in effect.',
   env: 'baze env\n  Print `export BAZE_API_KEY=...` for eval "$(baze env)".',
-  models: `baze models [query] [--type llm|audio|image|video|embedding|rerank|realtime] [--json]
-  Models this key can call, with lane, context and list price. --type defaults
-  to llm; embedding, rerank and realtime rows have no output price, so that column is -.`,
+  models: `baze models [query] [--type llm|audio|image|video|embedding|rerank|decisions|realtime] [--json]
+  Models this key can call. --type defaults to llm (lane, context, list price per
+  1M tokens); embedding, rerank and decisions show the input price; audio shows
+  what each model is for. Image and video prices depend on the settings, so
+  price a call with \`baze gen image|video ... --estimate\`.`,
   embed: `baze embed [text...] [--file <path>] [--model ID] [--dimensions N] [--task-type T] [--json]
   Embedding vectors. Text comes from arguments, one per line of --file, or stdin.
   Without --model, the first embedding model this key can call. --task-type is

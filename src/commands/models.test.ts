@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { KNOWN_TYPES } from './models.js';
+import { KNOWN_TYPES, usd } from './models.js';
 import { byType } from '../catalog.js';
 import type { ModelRow } from '../types.js';
 
@@ -24,7 +24,16 @@ test('--type selects one category, not a prefix match', () => {
 });
 
 test('KNOWN_TYPES is every type the gateway sends', () => {
-  // `/models` with no ?type= returns all seven, in this order (models.py
-  // GATEWAY_MODEL_TYPES). A missing entry here rejects a type the server serves.
-  assert.deepEqual([...KNOWN_TYPES], ['llm', 'audio', 'image', 'video', 'embedding', 'rerank', 'realtime']);
+  // `/models` with no ?type= returns all eight, in this order (models.py
+  // GATEWAY_MODEL_TYPES). A missing entry here rejects a type the server serves:
+  // `decisions` was missing and `baze models --type decisions` said "Unknown".
+  assert.deepEqual([...KNOWN_TYPES], ['llm', 'audio', 'image', 'video', 'embedding', 'rerank', 'decisions', 'realtime']);
+});
+
+test('a price keeps the digits it has, up to four', () => {
+  // jev-latest is $0.042 per 1M; two fixed decimals printed 0.04.
+  assert.equal(usd(0.042), '0.042');
+  assert.equal(usd(2), '2.00');
+  assert.equal(usd(0.13), '0.13');
+  assert.equal(usd(null), '-');
 });
