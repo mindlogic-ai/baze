@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseArgs } from '../args.js';
 import { knownFor } from '../flags.js';
-import { chargedCredits, checkKindFlags, estimateHeadline, genCommand, parseTimeoutS, pollTiming } from './gen.js';
+import { chargedCredits } from '../charge.js';
+import { checkKindFlags, estimateHeadline, genCommand, parseTimeoutS, pollTiming } from './gen.js';
 
 const parse = (...argv: string[]) => parseArgs(['gen', ...argv], knownFor('gen'));
 

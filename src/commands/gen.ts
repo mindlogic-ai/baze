@@ -19,6 +19,7 @@ import {
   pcmToWav,
   writeResult,
 } from '../media.js';
+import { type ChargeReply, chargedCredits, chargedFromHeaders } from '../charge.js';
 import { checkCount, checkParams, describeParams, type ParamSpec, parseSets } from '../params.js';
 import { c, CliError, formatCredits, info, out, say } from '../ui.js';
 import { requireApiKey } from './models.js';
@@ -324,16 +325,6 @@ async function showEstimate(ctx: Ctx, kind: 'image' | 'video' | 'music', body: R
 
 /** What a submit says it deducted: `credits_charged` in every billing mode,
  * else the KRW-mode `billing` block (servers before `credits_charged`). */
-interface ChargeReply {
-  credits_charged?: number | null;
-  billing?: { deducted_credit?: number } | null;
-}
-
-export function chargedCredits(reply: ChargeReply | undefined): number | null {
-  const amount = reply?.credits_charged ?? reply?.billing?.deducted_credit;
-  return typeof amount === 'number' && Number.isFinite(amount) ? amount : null;
-}
-
 interface ImageReply extends ChargeReply {
   operation_id?: string;
   status?: string;
@@ -525,8 +516,9 @@ async function genSpeech(ctx: Ctx): Promise<number> {
     const bytes = pcm ? pcmToWav(got.bytes) : got.bytes;
     const [path] = outputPaths('speech', 1, pcm ? 'wav' : extensionFor(got.contentType, undefined, 'wav'), outputFlag(ctx));
     writeResult(path!, bytes);
-    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [path!], requestId: got.requestId });
-    return finish(ctx, { kind: 'speech', model, historyId: base.id, files: [path!], requestId: got.requestId });
+    const credits = chargedFromHeaders(got.headers);
+    recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [path!], credits, requestId: got.requestId });
+    return finish(ctx, { kind: 'speech', model, historyId: base.id, files: [path!], credits, requestId: got.requestId });
   } catch (error) {
     recordFailure(base, error);
   }
@@ -556,8 +548,7 @@ async function genMusic(ctx: Ctx): Promise<number> {
     });
     const [path] = outputPaths('music', 1, extensionFor(got.contentType, undefined, 'mp3'), outputFlag(ctx));
     writeResult(path!, got.bytes);
-    const charged = got.headers.get('x-credits-charged');
-    const credits = charged !== null && charged !== '' && Number.isFinite(Number(charged)) ? Number(charged) : null;
+    const credits = chargedFromHeaders(got.headers);
     recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [path!], credits, requestId: got.requestId });
     return finish(ctx, { kind: 'music', model, historyId: base.id, files: [path!], credits, requestId: got.requestId });
   } catch (error) {

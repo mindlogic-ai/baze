@@ -35,8 +35,13 @@ export const info = (s: string): void => {
   if (!quiet) say(c.dim(s));
 };
 
-/** Credits as a person reads them; `--json` keeps the gateway's exact number. */
+/**
+ * Credits as a person reads them; `--json` keeps the gateway's exact number.
+ * Two decimals, except a charge under 0.01 keeps four - an embedding call is
+ * charged 0.0015 credits exactly, and "0" read as free.
+ */
 export function formatCredits(n: number): string {
+  if (n !== 0 && Math.abs(n) < 0.01) return String(Math.round(n * 10_000) / 10_000);
   return String(Math.round(n * 100) / 100);
 }
 
