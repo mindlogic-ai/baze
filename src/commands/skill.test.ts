@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { installSkill, readSkillSource, skillState, type SkillTarget, uninstallSkill } from './skill.js';
+import { installSkill, onPath, readSkillSource, skillState, type SkillTarget, uninstallSkill } from './skill.js';
 
 function targets(withClaude: boolean, withCodex: boolean): SkillTarget[] {
   const root = mkdtempSync(join(tmpdir(), 'baze-skill-'));
@@ -42,7 +42,7 @@ test('a second install is a no-op, and a changed skill is reported and replaced'
 
 test('with neither tool set up, install says so instead of creating their folders', () => {
   const t = targets(false, false);
-  assert.throws(() => installSkill('x', t), /Neither Claude Code nor Codex/);
+  assert.throws(() => installSkill('x', t), /Neither Claude Code nor Codex is installed/);
   assert.equal(existsSync(t[0]!.home), false);
 });
 
@@ -53,4 +53,22 @@ test('uninstall removes only our file and keeps a folder that holds anything els
   assert.equal(uninstallSkill(t).length, 2);
   assert.equal(existsSync(join(t[0]!.file, '..')), false);
   assert.equal(readFileSync(join(t[1]!.file, '..', 'notes.md'), 'utf8'), 'mine');
+});
+
+test('the tool being installed decides, not its config folder', () => {
+  // A leftover ~/.codex got a skill for a Codex that was not installed, and a
+  // fresh install with no folder yet got none (dev QA, 2026-09-28).
+  const t = targets(false, true);
+  t[0]!.installed = true;
+  t[1]!.installed = false;
+  assert.deepEqual(installSkill('x', t), [t[0]!.file]);
+  assert.equal(skillState(t[1]!, 'x'), 'no-tool');
+});
+
+test('PATH lookup finds an executable by name without running it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'baze-path-'));
+  writeFileSync(join(dir, 'codex'), '');
+  assert.equal(onPath('codex', dir), true);
+  assert.equal(onPath('claude', dir), false);
+  assert.equal(onPath('codex', ''), false);
 });
