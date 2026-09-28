@@ -53,9 +53,11 @@ export class CliError extends Error {
   readonly status?: number;
   /** The gateway's X-Request-ID for the failed call - what support asks for. */
   readonly requestId?: string;
+  /** Seconds from a 429's Retry-After header, when the gateway sent one. */
+  readonly retryAfterS?: number;
   constructor(
     message: string,
-    options: { hint?: string; exitCode?: number; status?: number; requestId?: string } = {},
+    options: { hint?: string; exitCode?: number; status?: number; requestId?: string; retryAfterS?: number } = {},
   ) {
     super(message);
     this.name = 'CliError';
@@ -63,5 +65,6 @@ export class CliError extends Error {
     this.exitCode = options.exitCode ?? 1;
     this.status = options.status;
     this.requestId = options.requestId;
+    this.retryAfterS = options.retryAfterS;
   }
 }

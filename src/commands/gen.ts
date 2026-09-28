@@ -26,7 +26,8 @@ import { requireApiKey } from './models.js';
 const KINDS = ['image', 'video', 'speech', 'music', 'transcribe'] as const;
 type Kind = (typeof KINDS)[number];
 
-const POLL_MS = 5_000;
+/** The waits between polls; tests shorten them. */
+export const pollTiming = { pollMs: 5_000, retryMs: 5_000 };
 const DEFAULT_TIMEOUT_S = 900;
 /** One status poll or model card: small answers, so a minute means the host is gone. */
 const QUICK_REQUEST_MS = 60_000;
@@ -124,25 +125,68 @@ function prompt(ctx: Ctx, what: string): string {
   return text;
 }
 
+/**
+ * A status poll that could not be read, or a job still running at --timeout.
+ * Neither says the job failed: it was accepted and paid for, so nothing may
+ * record it as failed. The caller points at `baze gen wait` instead.
+ */
+class PollInterrupted extends CliError {}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * How long to wait before polling again after `error`, or undefined when
+ * waiting cannot help. A 429 says when (Retry-After); a 5xx, a timeout or an
+ * unreachable host is worth another try. A 401/403/404 is not.
+ */
+function retryDelayMs(error: CliError): number | undefined {
+  if (error.status === 429) return (error.retryAfterS ?? pollTiming.retryMs / 1000) * 1000;
+  if (error.status === undefined || error.status >= 500) return pollTiming.retryMs;
+  return undefined;
+}
+
 async function pollUntilDone<T extends { status?: string }>(
   label: string,
   fetchStatus: () => Promise<T>,
   timeoutS: number,
 ): Promise<T> {
   const started = Date.now();
+  const deadline = started + timeoutS * 1000;
   let lastNote = started;
   for (;;) {
-    const status = await fetchStatus();
+    let status: T;
+    try {
+      status = await fetchStatus();
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      const waitMs = retryDelayMs(error);
+      if (waitMs === undefined || Date.now() + waitMs > deadline) {
+        throw new PollInterrupted(error.message, { hint: error.hint, status: error.status, requestId: error.requestId });
+      }
+      info(`  ${error.status === 429 ? 'rate limited' : 'no answer'}; polling again in ${Math.ceil(waitMs / 1000)}s`);
+      await sleep(waitMs);
+      continue;
+    }
     if (status.status !== 'processing' && status.status !== 'pending' && status.status !== 'submitted') return status;
-    if (Date.now() - started > timeoutS * 1000) {
-      throw new CliError(`${label} is still running after ${timeoutS}s.`, { exitCode: 1 });
+    if (Date.now() > deadline) {
+      throw new PollInterrupted(`${label} is still running after ${timeoutS}s.`);
     }
     if (Date.now() - lastNote >= 15_000) {
       info(`  still ${status.status ?? 'running'} (${Math.round((Date.now() - started) / 1000)}s)`);
       lastNote = Date.now();
     }
-    await new Promise((r) => setTimeout(r, POLL_MS));
+    await sleep(pollTiming.pollMs);
   }
+}
+
+/** The job is alive and paid for: say how to pick it up, keep what the gateway said. */
+function resumable(error: PollInterrupted, historyId: string): CliError {
+  const resume = `The job is still running; resume with \`baze gen wait ${historyId}\`.`;
+  return new CliError(error.message, {
+    hint: error.hint ? `${error.hint} ${resume}` : resume,
+    status: error.status,
+    requestId: error.requestId,
+  });
 }
 
 export function parseTimeoutS(raw: string | true | undefined): number {
@@ -327,6 +371,9 @@ async function genImage(ctx: Ctx): Promise<number> {
     id: newHistoryId(), at: new Date().toISOString(), kind: 'image', model, status: 'submitted', host: ctx.host, prompt: text,
   };
   recordHistory(base);
+  // What history knows so far; a failure is recorded on top of it, so a job
+  // that was accepted keeps its operation id and charge.
+  let current = base;
   try {
     const { body: reply, requestId } = await gatewayFetchJson<ImageReply>('/images/generate/', {
       apiKey: ctx.apiKey, method: 'POST', body, timeoutMs: submitMs(ctx),
@@ -335,7 +382,8 @@ async function genImage(ctx: Ctx): Promise<number> {
     const credits = chargedCredits(reply);
     let final = reply;
     if (reply.operation_id && !reply.data) {
-      recordHistory({ ...base, at: new Date().toISOString(), status: 'processing', operationId: reply.operation_id, credits, requestId });
+      current = { ...base, at: new Date().toISOString(), status: 'processing', operationId: reply.operation_id, credits, requestId };
+      recordHistory(current);
       info(`Submitted; waiting (history ${base.id}).`);
       final = await pollImage(ctx, model, reply.operation_id);
     }
@@ -344,7 +392,8 @@ async function genImage(ctx: Ctx): Promise<number> {
     recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files, credits, requestId, operationId: reply.operation_id });
     return finish(ctx, { kind: 'image', model, historyId: base.id, files, credits, requestId, operationId: reply.operation_id });
   } catch (error) {
-    recordFailure(base, error);
+    if (error instanceof PollInterrupted) throw resumable(error, base.id);
+    recordFailure(current, error);
   }
 }
 
@@ -408,10 +457,7 @@ async function waitVideo(ctx: Ctx, base: HistoryEntry, operationId: string, requ
     recordHistory({ ...base, at: new Date().toISOString(), status: 'completed', files: [file], operationId, credits, requestId });
     return finish(ctx, { kind: 'video', model: base.model, historyId: base.id, files: [file], operationId, credits, requestId });
   } catch (error) {
-    if (error instanceof CliError && /still running/.test(error.message)) {
-      // Not a failure: the job is alive and already paid for.
-      throw new CliError(error.message, { hint: `Resume with \`baze gen wait ${base.id}\`.` });
-    }
+    if (error instanceof PollInterrupted) throw resumable(error, base.id);
     recordFailure(refunded ? { ...base, credits: null } : base, error);
   }
 }
@@ -550,9 +596,7 @@ async function waitTranscript(ctx: Ctx, base: HistoryEntry, operationId: string,
     }
     return finish(ctx, { kind: 'transcribe', model: base.model, historyId: base.id, files, operationId, credits, requestId, text: status.text ?? '' });
   } catch (error) {
-    if (error instanceof CliError && /still running/.test(error.message)) {
-      throw new CliError(error.message, { hint: `Resume with \`baze gen wait ${base.id}\`.` });
-    }
+    if (error instanceof PollInterrupted) throw resumable(error, base.id);
     recordFailure(base, error);
   }
 }
@@ -617,6 +661,7 @@ async function genWait(ctx: Ctx): Promise<number> {
       recordHistory({ ...entry, at: new Date().toISOString(), status: 'completed', files });
       return finish(ctx, { kind: 'image', model: entry.model, historyId: entry.id, files, operationId: entry.operationId, credits: entry.credits, requestId: entry.requestId });
     } catch (error) {
+      if (error instanceof PollInterrupted) throw resumable(error, entry.id);
       recordFailure(entry, error);
     }
   }
