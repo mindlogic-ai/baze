@@ -31,7 +31,7 @@ For a container, set `BAZE_API_KEY` and skip login. For a shell: `eval "$(baze e
 
 ```bash
 baze models --json
-baze models --json --type embedding      # llm (default) | audio | image | video | embedding | rerank | realtime
+baze models --json --type embedding      # llm (default) | audio | image | video | embedding | rerank | decisions | realtime
 baze models gpt-5 --json                 # substring filter on the id
 ```
 
@@ -198,7 +198,7 @@ Newest first, one object per call: `{ "id", "at", "kind", "model", "status": "su
 ## MCP suites
 
 ```bash
-baze mcp list --json                     # [ { "slug", "name", "display_name", "description", "url", "transport" } ]
+baze mcp list --json                     # [ { "slug", "display_name", "description", "url", "transport" } ]
 baze mcp tools <suite> --json            # the suite's tool objects as the server sends them: [ { "name", "description", "inputSchema" } ]
 baze mcp call <suite> <tool> '{"arg": "value"}' --json   # the JSON-RPC result, usually { "content": [ { "type": "text", "text": "…" } ] }
 echo '{"arg": "value"}' | baze mcp call <suite> <tool> --json
