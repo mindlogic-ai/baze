@@ -2,7 +2,7 @@ import { CliError } from './ui.js';
 
 export const HOSTS = {
   aws: 'https://factchat-cloud.mindlogic.ai',
-  ncp: 'https://factchat.mindlogic-kr-api.com',
+  ncp: 'https://api.baze.co',
 } as const;
 
 const HOST_FOR_TAG: Record<string, string | undefined> = { aws: HOSTS.aws, ncp: HOSTS.ncp };
