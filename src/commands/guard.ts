@@ -1,5 +1,6 @@
 import type { Parsed } from '../args.js';
 import { BATCH_REQUEST_TIMEOUT_MS, gatewayFetch } from '../api.js';
+import { billedLine, type ChargeReply, chargedCredits } from '../charge.js';
 import { readTextInputs } from '../input.js';
 import { requireApiKey } from './models.js';
 import { c, CliError, info, out, say } from '../ui.js';
@@ -51,7 +52,7 @@ interface GuardResult {
   masked_text?: string;
 }
 
-interface GuardResponse {
+interface GuardResponse extends ChargeReply {
   mode: string;
   flagged: boolean;
   results: GuardResult[];
@@ -87,7 +88,7 @@ export async function guardCommand(parsed: Parsed): Promise<number> {
 
   info('');
   const flaggedCount = res.results.filter((r) => r.flagged).length;
-  say(`${flaggedCount} of ${res.results.length} flagged. ${res.usage?.requests ?? res.results.length} item(s) billed.`);
+  say(`${flaggedCount} of ${res.results.length} flagged. ${billedLine(`${res.usage?.requests ?? res.results.length} item(s)`, chargedCredits(res))}.`);
   // Screening is per item, not per token, so an unflagged item costs the same.
   return 0;
 }

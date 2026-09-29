@@ -38,3 +38,17 @@ test('an empty result says so instead of printing an empty table', () => {
   const empty = { ...BODY, total: { call_count: 0, credits: 0 }, rows: [] };
   assert.match(formatUsage(empty).join('\n'), /No gateway calls/i);
 });
+
+test('credits always carry two decimals so the column lines up', async () => {
+  const { formatUsage } = await import('./usage.js');
+  const lines = formatUsage({
+    object: 'usage', start_date: '2026-09-01', end_date: '2026-09-28', timezone: 'Asia/Seoul', group_by: 'model', scope: 'key',
+    total: { call_count: 1200, credits: 2007.42 },
+    rows: [
+      { key: 'seedance', call_count: 3, credits: 845.9 },
+      { key: 'veo', call_count: 1197, credits: 1161.52 },
+    ],
+  });
+  assert.ok(lines.some((l) => l.endsWith('845.90')));
+  assert.ok(lines.some((l) => /1,197\s+1,161\.52$/.test(l)));
+});

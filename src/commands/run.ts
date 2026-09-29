@@ -83,10 +83,12 @@ export async function runCommand(tool: Tool, parsed: Parsed): Promise<number> {
       // Two /credits/ calls per launch; cheap next to a coding session.
       const delta = before - after;
       const amount = Math.abs(delta).toLocaleString('en-US', { maximumFractionDigits: 1 });
+      // The balance, not this session's bill: anything else on the account
+      // in the meantime moves it too.
       info(
         delta >= 0
-          ? `Balance went down ${amount} credits while ${tool} ran (other use of this account in that time is included). Per model: baze usage`
-          : `Balance went up ${amount} credits while ${tool} ran - a renewal or top-up landed. Per model: baze usage`,
+          ? `Your balance fell ${amount} credits during this ${tool} session. That includes any other use of the account meanwhile; \`baze usage\` has the breakdown by model.`
+          : `Your balance rose ${amount} credits during this ${tool} session - a renewal or top-up landed. \`baze usage\` has the breakdown by model.`,
       );
     }
   }

@@ -1,6 +1,6 @@
 import type { Parsed } from '../args.js';
 import { gatewayFetch } from '../api.js';
-import { info, out } from '../ui.js';
+import { fit, info, out, termWidth } from '../ui.js';
 import { requireApiKey } from './models.js';
 
 export interface UsageRow {
@@ -20,19 +20,22 @@ export interface UsageSummary {
   rows: UsageRow[];
 }
 
-const n = (v: number): string => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const count = (v: number): string => v.toLocaleString('en-US');
+/** Always two decimals, so a column of credits lines up on the point (845.90 over 1,161.52). */
+const n = (v: number): string => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatUsage(body: UsageSummary): string[] {
   const header = `${body.start_date} to ${body.end_date} (${body.timezone})  ·  by ${body.group_by}  ·  scope ${body.scope}`;
   if (body.rows.length === 0) return [header, '', 'No gateway calls in this window.'];
 
-  const width = Math.max(6, ...body.rows.map((r) => r.key.length));
+  // A long model id must not push the numbers off a narrow terminal.
+  const width = Math.min(Math.max(6, ...body.rows.map((r) => r.key.length)), Math.max(20, termWidth() - 27));
   const lines = [header, '', `${''.padEnd(width)}  ${'calls'.padStart(9)}  ${'credits'.padStart(12)}`];
   for (const r of body.rows) {
-    lines.push(`${r.key.padEnd(width)}  ${n(r.call_count).padStart(9)}  ${n(r.credits).padStart(12)}`);
+    lines.push(`${fit(r.key, width).padEnd(width)}  ${count(r.call_count).padStart(9)}  ${n(r.credits).padStart(12)}`);
   }
   lines.push('');
-  lines.push(`${'total'.padEnd(width)}  ${n(body.total.call_count).padStart(9)}  ${n(body.total.credits).padStart(12)}`);
+  lines.push(`${'total'.padEnd(width)}  ${count(body.total.call_count).padStart(9)}  ${n(body.total.credits).padStart(12)}`);
   return lines;
 }
 

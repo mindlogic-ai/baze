@@ -7,7 +7,7 @@ import { CLI_CONTRACT, fetchCatalogDetail } from '../api.js';
 import { apiBase, loadStoredCredentials, resolveCredential } from '../config.js';
 import { claudeEnv } from '../harness/claude.js';
 import { readSkillSource, skillState, skillTargets } from './skill.js';
-import { c, fail, info, maskKey, ok, say, warn } from '../ui.js';
+import { c, item, mark, maskKey, say, section, shortPath } from '../ui.js';
 
 export function claudeSettingsPath(): string {
   return join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'settings.json');
@@ -61,51 +61,58 @@ function toolVersion(bin: string): string | undefined {
   }
 }
 
+/**
+ * Grouped the way `/mcp` in Claude Code is: a bold heading per area, one line
+ * per thing with a colored glyph, detail dimmed. Ten flat "OK ..." lines mixed
+ * the key, the tools, the config files and the skill (feedback, 2026-09-28).
+ */
 export async function doctorCommand(_parsed: Parsed): Promise<number> {
   let problems = 0;
-
+  let advice = 0;
   const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
-  if (major > 20 || (major === 20 && minor >= 10)) ok(`Node.js ${process.versions.node}`);
-  else {
-    fail(`Node.js ${process.versions.node} - baze needs 20.10 or newer.`);
-    problems++;
-  }
+  const nodeOk = major > 20 || (major === 20 && minor >= 10);
 
+  section('Account');
   const cred = resolveCredential();
   if (!cred.apiKey) {
-    fail('No API key.');
-    info('Run `baze login`, or set BAZE_API_KEY.');
+    item(mark.fail, 'No API key', 'run `baze login`, or set BAZE_API_KEY');
     problems++;
   } else {
     const base = apiBase();
     try {
       const catalog = await fetchCatalogDetail(cred.apiKey, { force: true, base });
-      ok(`Key ${maskKey(cred.apiKey)} (${cred.source}) works on ${base} - ${catalog.rows.filter((r) => r.type === 'llm').length} chat models.`);
+      const chat = catalog.rows.filter((r) => r.type === 'llm').length;
+      item(mark.ok, `Key ${maskKey(cred.apiKey)}`, `${cred.source} · ${hostOf(base)} · ${chat} chat models`);
       const drift = contractDrift(catalog.contract);
       if (drift) {
-        warn(drift);
-        info('Run `baze update`. Commands keep working; a new lane or model type may be missing.');
+        item(mark.warn, drift, 'run `baze update`; a new lane or model type may be missing');
         problems++;
       }
       if (cred.source === 'stored' && !loadStoredCredentials()?.host) {
-        warn('No host was recorded for this key; run `baze login` again to detect it.');
+        item(mark.warn, 'No host recorded for this key', 'run `baze login` again to detect it');
       }
     } catch (error) {
-      fail(`Key rejected on ${base}: ${error instanceof Error ? error.message : String(error)}`);
+      item(mark.fail, `Key rejected on ${hostOf(base)}`, error instanceof Error ? error.message : String(error));
       problems++;
     }
   }
 
-  for (const [label, bin] of [
+  say('');
+  section('Coding agents', 'baze runs the ones you already have');
+  const tools = [
     ['Claude Code', 'claude'],
     ['Codex CLI', 'codex'],
     ['OpenCode', 'opencode'],
-  ] as const) {
+  ] as const;
+  const width = Math.max(...tools.map(([label]) => label.length));
+  for (const [label, bin] of tools) {
     const version = toolVersion(bin);
-    if (version) ok(`${label} (${bin}): ${version}`);
-    else info(`${label} (${bin}): not installed - baze runs the tools you already have.`);
+    // `2.1.283 (Claude Code)`, `codex-cli 0.157.1`: the number is what differs.
+    if (version) item(mark.ok, label.padEnd(width), version.match(/\d+(?:\.\d+)+/)?.[0] ?? version);
+    else item(mark.off, label.padEnd(width), 'not installed');
   }
 
+  const files: Array<[string, string, string?]> = [];
   const settingsPath = claudeSettingsPath();
   if (existsSync(settingsPath)) {
     let parsed: unknown;
@@ -120,36 +127,63 @@ export async function doctorCommand(_parsed: Parsed): Promise<number> {
       : undefined;
     if (!readable) {
       // An unreadable file has not been checked, so say nothing about conflicts.
-      warn(`${settingsPath} is not valid JSON; \`baze setup claude\` would refuse to touch it.`);
+      files.push([mark.warn, settingsPath, 'not valid JSON; `baze setup claude` would refuse to touch it']);
       problems++;
     } else if (conflict) {
-      warn(`${settingsPath}: ${conflict}.`);
-      info('That block outranks shell variables. `baze claude` overrides it with --settings, but a plain `claude` will not reach us.');
+      files.push([mark.warn, settingsPath, `${conflict} - outranks shell variables, so a plain \`claude\` will not reach us (\`baze claude\` still does)`]);
       problems++;
     } else {
-      ok(`${settingsPath} does not conflict with baze.`);
+      files.push([mark.ok, settingsPath, 'no conflict']);
     }
   }
-
-  for (const [label, path] of [
-    ['Codex', codexConfigPath()],
-    ['OpenCode', opencodeConfigPath()],
-  ] as const) {
-    if (existsSync(path)) ok(`${label} config: ${path}`);
+  for (const path of [codexConfigPath(), opencodeConfigPath()]) {
+    if (existsSync(path)) files.push([mark.ok, path]);
+  }
+  if (files.length > 0) {
+    say('');
+    section('Config files');
+    for (const [glyph, path, detail] of files) item(glyph, shortPath(path), detail);
   }
 
   // Advice, not a problem: baze works without the skill; the agent just does
   // not know about `baze gen` and `baze bot`.
   const skill = readSkillSource();
-  for (const target of skillTargets()) {
-    const state = skillState(target, skill);
-    if (state === 'current') ok(`baze skill for ${target.label}: ${target.file}`);
-    else if (state === 'missing') info(`baze skill for ${target.label}: not installed - \`baze skill install\` teaches it gen, bot and the cost rules.`);
-    else if (state === 'outdated') warn(`baze skill for ${target.label} is out of date - run \`baze skill install\`.`);
+  const targets = skillTargets()
+    .map((target) => ({ target, state: skillState(target, skill) }))
+    .filter(({ state }) => state !== 'no-tool');
+  if (targets.length > 0) {
+    say('');
+    section('baze skill', 'teaches the agent gen, bot and the cost rules');
+    const skillWidth = Math.max(...targets.map(({ target }) => target.label.length));
+    for (const { target, state } of targets) {
+      const label = target.label.padEnd(skillWidth);
+      if (state === 'current') item(mark.ok, label, shortPath(target.file));
+      else {
+        item(mark.warn, label, state === 'outdated' ? 'out of date · run `baze skill install`' : 'not installed · run `baze skill install`');
+        advice++;
+      }
+    }
+  }
+
+  if (!nodeOk) {
+    say('');
+    section('Runtime');
+    item(mark.fail, `Node.js ${process.versions.node}`, 'baze needs 20.10 or newer');
+    problems++;
   }
 
   say('');
-  if (problems === 0) ok('Everything checks out.');
-  else say(c.yellow(`${problems} thing${problems === 1 ? '' : 's'} to fix.`));
+  const extra = advice > 0 ? c.dim(` · ${advice} optional`) : '';
+  if (problems === 0) say(`${mark.ok} All good${extra}`);
+  else say(`${c.yellow(`${problems} thing${problems === 1 ? '' : 's'} to fix`)}${extra}`);
   return problems === 0 ? 0 : 1;
 }
+
+/** The host alone; the scheme adds nothing to read. */
+const hostOf = (base: string): string => {
+  try {
+    return new URL(base).host;
+  } catch {
+    return base;
+  }
+};

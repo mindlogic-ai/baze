@@ -1,5 +1,6 @@
 import type { Parsed } from '../args.js';
 import { BATCH_REQUEST_TIMEOUT_MS, fetchCatalog, gatewayFetch } from '../api.js';
+import { billedLine, type ChargeReply, chargedCredits } from '../charge.js';
 import { byType } from '../catalog.js';
 import { readTextInputs } from '../input.js';
 import { requireApiKey } from './models.js';
@@ -38,7 +39,7 @@ export function buildEmbedBody(
   return body;
 }
 
-interface EmbedResponse {
+interface EmbedResponse extends ChargeReply {
   data: { index: number; embedding: number[] }[];
   model: string;
   usage?: { prompt_tokens?: number; total_tokens?: number; image_tokens?: number };
@@ -81,6 +82,6 @@ export async function embedCommand(parsed: Parsed): Promise<number> {
     out(`[${row.index}] ${head}${row.embedding.length > 4 ? ', …' : ''}`);
   }
   info('');
-  info(`${res.usage?.total_tokens ?? 0} tokens billed. Full vectors: --json`);
+  info(`${billedLine(`${res.usage?.total_tokens ?? 0} tokens`, chargedCredits(res))}. Full vectors: --json`);
   return 0;
 }

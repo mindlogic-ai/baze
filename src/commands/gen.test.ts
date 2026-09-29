@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseArgs } from '../args.js';
 import { knownFor } from '../flags.js';
-import { chargedCredits, checkKindFlags, estimateHeadline, genCommand, parseTimeoutS } from './gen.js';
+import { chargedCredits } from '../charge.js';
+import { checkKindFlags, estimateHeadline, genCommand, parseTimeoutS, pollTiming } from './gen.js';
 
 const parse = (...argv: string[]) => parseArgs(['gen', ...argv], knownFor('gen'));
 
@@ -181,6 +182,95 @@ test('a video left running records its charge at submit', async () => {
     const [entry] = readHistory();
     assert.equal(entry!.status, 'processing');
     assert.equal(entry!.credits, 31.8185);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('a rate-limited poll waits as told and the video still completes', async () => {
+  // Parallel waits hit the 120/min limit; the first 429 marked a paid video
+  // "failed" (dev QA, 2026-09-28).
+  const readHistory = await freshHome('https://vid429.test');
+  Object.assign(pollTiming, { pollMs: 1, retryMs: 1 });
+  let polls = 0;
+  const gw = stubGateway((url, init) => {
+    if (url.includes('/video/generation/') && init?.method === 'POST') {
+      return new Response(JSON.stringify({ operation_id: 'op3', status: 'processing', credits_charged: 33.75 }));
+    }
+    if (url.includes('/video/generation/op3/')) {
+      polls++;
+      return polls === 1
+        ? new Response(JSON.stringify({ detail: { message: 'Rate limit' } }), { status: 429, headers: { 'retry-after': '0' } })
+        : new Response(JSON.stringify({ operation_id: 'op3', status: 'completed', video_uri: 'data:video/mp4;base64,AAAA' }));
+    }
+    return new Response(JSON.stringify({ parameters: [] }));
+  });
+  try {
+    assert.equal(await genCommand(parse('video', 'a cat', '--model', 'v', '--json')), 0);
+    assert.equal(polls, 2);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'completed');
+    assert.equal(entry!.credits, 33.75);
+  } finally {
+    gw.restore();
+    Object.assign(pollTiming, { pollMs: 5_000, retryMs: 5_000 });
+  }
+});
+
+test('a poll that cannot be read leaves the paid job resumable, not failed', async () => {
+  const readHistory = await freshHome('https://vid401.test');
+  const gw = stubGateway((url, init) =>
+    url.includes('/video/generation/') && init?.method === 'POST'
+      ? new Response(JSON.stringify({ operation_id: 'op4', status: 'processing', credits_charged: 20 }))
+      : url.includes('/video/generation/op4/')
+        ? new Response(JSON.stringify({ detail: { message: 'This API key was revoked.' } }), { status: 401 })
+        : new Response(JSON.stringify({ parameters: [] })),
+  );
+  try {
+    await assert.rejects(genCommand(parse('video', 'a cat', '--model', 'v')), (error: Error & { hint?: string }) => {
+      assert.match(error.message, /revoked/);
+      assert.match(error.hint ?? '', /baze gen wait/);
+      return true;
+    });
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'processing');
+    assert.equal(entry!.operationId, 'op4');
+    assert.equal(entry!.credits, 20);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('an async image interrupted mid-poll keeps its operation id for gen wait', async () => {
+  const readHistory = await freshHome('https://img401.test');
+  const gw = stubGateway((url, init) =>
+    url.includes('/images/generate/') && init?.method === 'POST'
+      ? new Response(JSON.stringify({ operation_id: 'gw.img', status: 'processing', credits_charged: 8 }))
+      : url.includes('/images/generate/gw.img/')
+        ? new Response('{}', { status: 403 })
+        : new Response(JSON.stringify({ parameters: [] })),
+  );
+  try {
+    await assert.rejects(genCommand(parse('image', 'a cat', '--model', 'i')), /not allowed/);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'processing');
+    assert.equal(entry!.operationId, 'gw.img');
+  } finally {
+    gw.restore();
+  }
+});
+
+test('--seconds on a Lyria model is refused before anything is paid for', async () => {
+  const readHistory = await freshHome('https://lyria.test');
+  const gw = stubGateway((url) =>
+    url.includes('/models/')
+      ? new Response(JSON.stringify({ data: [{ id: 'lyria-3-pro-preview', type: 'audio', audio_client: 'google_lyria3' }] }))
+      : new Response('{}', { status: 400 }),
+  );
+  try {
+    await assert.rejects(genCommand(parse('music', 'a song', '--model', 'lyria-3-pro-preview', '--seconds', '30')), /picks its own length/);
+    assert.equal(gw.calls.some((c) => c.url.includes('/audio/music/')), false);
+    assert.deepEqual(readHistory(), []);
   } finally {
     gw.restore();
   }

@@ -1,7 +1,7 @@
 import type { Parsed } from '../args.js';
 import { gatewayFetch, gatewayFetchRaw } from '../api.js';
 import { readStdin } from '../input.js';
-import { c, CliError, info, out, say } from '../ui.js';
+import { c, CliError, fit, info, out, say, termWidth } from '../ui.js';
 import { requireApiKey } from './models.js';
 
 export const PROTOCOL_VERSION = '2025-06-18';
@@ -142,7 +142,8 @@ export async function mcpCommand(parsed: Parsed): Promise<number> {
     }
     const width = Math.max(...res.data.map((s) => s.slug.length));
     say(c.dim(`${'suite'.padEnd(width)}  description`));
-    for (const s of res.data) out(`${s.slug.padEnd(width)}  ${firstLine(s.description) || s.display_name}`);
+    // One line per suite, cut to the terminal: a description ran past 150 characters.
+    for (const s of res.data) out(`${s.slug.padEnd(width)}  ${fit(firstLine(s.description) || s.display_name, termWidth() - width - 2)}`);
     info('');
     info(`${res.data.length} suites. Tools of one: baze mcp tools <suite>. Listing is free; each tools/call is billed.`);
     return 0;
@@ -162,11 +163,11 @@ export async function mcpCommand(parsed: Parsed): Promise<number> {
     }
     for (const t of tools) {
       out(t.name);
-      if (t.description) say(`  ${firstLine(t.description)}`);
+      if (t.description) say(`  ${fit(firstLine(t.description), termWidth() - 2)}`);
       const required = new Set(t.inputSchema?.required ?? []);
       for (const [name, schema] of Object.entries(t.inputSchema?.properties ?? {})) {
         const desc = schema.description ? ` - ${firstLine(schema.description)}` : '';
-        say(c.dim(`    ${name}${required.has(name) ? '' : '?'}: ${schema.type ?? 'any'}${desc}`));
+        say(c.dim(fit(`    ${name}${required.has(name) ? '' : '?'}: ${schema.type ?? 'any'}${desc}`, termWidth())));
       }
     }
     info('');

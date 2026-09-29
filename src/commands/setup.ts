@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import type { Parsed } from '../args.js';
 import { fetchCatalog } from '../api.js';
 import { pickDefault, type Tool } from '../catalog.js';
@@ -59,6 +60,10 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
     writeText(path, text);
     ok(`Added the Baze provider to ${path} and set the default model to ${model}.${bak ? ` (backup: ${bak})` : ''}`);
     printEnvHint();
+    // Codex asks on its first run in a folder whether to trust it and saves the
+    // answer as [projects."<path>"] in this same file. That entry is Codex's,
+    // not ours; a tester read it as something setup had written.
+    info('Codex asks whether to trust a folder the first time it runs there and records the answer in this file too; baze writes no [projects] entries.');
     return 0;
   }
 
@@ -95,9 +100,18 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
   return 0;
 }
 
+/** The startup file of the user's shell, from $SHELL; bash users were told ~/.zshrc. */
+export function shellRcFile(shell: string | undefined = process.env.SHELL): string {
+  const name = shell ? basename(shell) : '';
+  if (name === 'bash') return '~/.bashrc';
+  if (name === 'fish') return '~/.config/fish/config.fish';
+  if (name === 'zsh') return '~/.zshrc';
+  return 'your shell startup file';
+}
+
 function printEnvHint(): void {
   say('');
-  say(`This config reads the key from ${c.bold(ENV_KEY_NAME)} in your shell. Add one line to ~/.zshrc:`);
-  say(`  ${c.cyan('eval "$(baze env)"')}`);
+  say(`This config reads the key from ${c.bold(ENV_KEY_NAME)} in your shell. Add one line to ${shellRcFile()}:`);
+  say(`  ${c.cyan(basename(process.env.SHELL ?? '') === 'fish' ? 'baze env | source' : 'eval "$(baze env)"')}`);
   info('Or skip that and run `baze codex` / `baze opencode`, which need no shell variable.');
 }

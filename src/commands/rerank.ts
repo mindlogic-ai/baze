@@ -1,5 +1,6 @@
 import type { Parsed } from '../args.js';
 import { BATCH_REQUEST_TIMEOUT_MS, fetchCatalog, gatewayFetch } from '../api.js';
+import { billedLine, type ChargeReply, chargedCredits } from '../charge.js';
 import { byType } from '../catalog.js';
 import { readTextInputs } from '../input.js';
 import { requireApiKey } from './models.js';
@@ -56,7 +57,7 @@ async function resolveModel(apiKey: string, asked: string | true | undefined): P
   return first.id;
 }
 
-interface RerankResponse {
+interface RerankResponse extends ChargeReply {
   model: string;
   results: { index: number; relevance_score: number | null }[];
   usage?: { total_tokens?: number };
@@ -95,6 +96,6 @@ export async function rerankCommand(parsed: Parsed): Promise<number> {
     out(`${(row.relevance_score ?? 0).toFixed(4)}  [${row.index}] ${head}`);
   }
   info('');
-  info(`${res.usage?.total_tokens ?? 0} tokens billed.`);
+  info(`${billedLine(`${res.usage?.total_tokens ?? 0} tokens`, chargedCredits(res))}.`);
   return 0;
 }

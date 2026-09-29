@@ -87,6 +87,13 @@ interface RequestOpts {
 
 const requestIdOf = (res: Response): string | undefined => res.headers.get('x-request-id') ?? undefined;
 
+/** Retry-After in seconds. The gateway sends the delta form; an HTTP date is not read. */
+export function retryAfterOf(res: Response): number | undefined {
+  const raw = res.headers.get('retry-after');
+  const n = raw === null ? Number.NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 const isTimeout = (error: unknown): boolean => (error as Error)?.name === 'TimeoutError';
 
 /**
@@ -166,6 +173,7 @@ async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response
       exitCode: res.status === 402 ? 2 : 1,
       status: res.status,
       requestId: requestIdOf(res),
+      retryAfterS: res.status === 429 ? retryAfterOf(res) : undefined,
     });
   }
   return res;

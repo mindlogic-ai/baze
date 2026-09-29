@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import type { Parsed } from '../args.js';
 import { CliError, info, ok, out, say } from '../ui.js';
 
@@ -13,24 +13,42 @@ const SOURCE = new URL('../../skills/baze/SKILL.md', import.meta.url);
 
 export interface SkillTarget {
   label: string;
-  /** The tool's config home; no home means the tool is not set up here. */
+  /** The tool's config home, where it reads skills from. */
   home: string;
   file: string;
+  /**
+   * Whether the tool itself is installed. A config folder is not proof - one
+   * outlives an uninstall, and `baze setup codex` creates ~/.codex on a
+   * machine without Codex - and a fresh install has none until its first run
+   * (dev QA, 2026-09-28). Absent, the folder decides (tests build targets by hand).
+   */
+  installed?: boolean;
 }
+
+/** Whether `bin` is an executable on PATH; no process is started. */
+export function onPath(bin: string, path: string = process.env.PATH ?? ''): boolean {
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT ?? '.EXE;.CMD').split(';') : [''];
+  return path
+    .split(delimiter)
+    .filter(Boolean)
+    .some((dir) => exts.some((ext) => existsSync(join(dir, `${bin}${ext}`))));
+}
+
+const toolInstalled = (target: SkillTarget): boolean => target.installed ?? existsSync(target.home);
 
 export function skillTargets(): SkillTarget[] {
   const claude = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
   const codex = process.env.CODEX_HOME ?? join(homedir(), '.codex');
   return [
-    { label: 'Claude Code', home: claude, file: join(claude, 'skills', 'baze', 'SKILL.md') },
-    { label: 'Codex', home: codex, file: join(codex, 'skills', 'baze', 'SKILL.md') },
+    { label: 'Claude Code', home: claude, file: join(claude, 'skills', 'baze', 'SKILL.md'), installed: onPath('claude') },
+    { label: 'Codex', home: codex, file: join(codex, 'skills', 'baze', 'SKILL.md'), installed: onPath('codex') },
   ];
 }
 
 export type SkillState = 'no-tool' | 'missing' | 'current' | 'outdated';
 
 export function skillState(target: SkillTarget, source: string): SkillState {
-  if (!existsSync(target.home)) return 'no-tool';
+  if (!toolInstalled(target)) return 'no-tool';
   if (!existsSync(target.file)) return 'missing';
   return readFileSync(target.file, 'utf8') === source ? 'current' : 'outdated';
 }
@@ -41,10 +59,10 @@ export function readSkillSource(): string {
 
 /** Writes the skill into every tool that is set up here; returns the files written. */
 export function installSkill(source: string, targets: SkillTarget[] = skillTargets()): string[] {
-  const present = targets.filter((t) => existsSync(t.home));
+  const present = targets.filter(toolInstalled);
   if (present.length === 0) {
-    throw new CliError('Neither Claude Code nor Codex is set up on this machine.', {
-      hint: `Install one of them first (${targets.map((t) => t.home).join(', ')} is missing).`,
+    throw new CliError('Neither Claude Code nor Codex is installed on this machine.', {
+      hint: 'Install one of them first; baze looks for `claude` and `codex` on PATH.',
     });
   }
   const written: string[] = [];
@@ -108,7 +126,7 @@ export async function skillCommand(parsed: Parsed): Promise<number> {
 function describe(state: SkillState, target: SkillTarget): string {
   switch (state) {
     case 'no-tool':
-      return `not set up here (${target.home} is missing)`;
+      return 'not installed here';
     case 'missing':
       return 'not installed - run `baze skill install`';
     case 'outdated':

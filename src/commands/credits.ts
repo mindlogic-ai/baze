@@ -17,7 +17,8 @@ export interface CreditBalance {
   total: Bucket;
 }
 
-const n = (v: number): string => v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+/** Always two decimals, so the remaining column lines up on the point. */
+const n = (v: number): string => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatCredits(body: CreditBalance): string[] {
   const lines: string[] = [];
