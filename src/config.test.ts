@@ -82,5 +82,5 @@ test('a different key from the env does not inherit the stored key host', async 
   assert.equal(apiBase(), 'https://stored.test');
   // A tagged key names its own deployment, whatever was stored.
   process.env.BAZE_API_KEY = `baze_${'a'.repeat(32)}40IzHq`;
-  assert.equal(apiBase(), 'https://factchat.mindlogic-kr-api.com');
+  assert.equal(apiBase(), 'https://api.baze.co');
 });
