@@ -163,7 +163,7 @@ stdout is data and stderr is prose, so `baze models --json | jq` and `eval "$(ba
 
 ## For coding agents
 
-`skills/baze/SKILL.md` is an agent skill for `baze gen` and `baze bot`, released with the CLI so it never describes a flag this version does not have. Copy the folder into your agent's skills directory (Claude Code: `~/.claude/skills/`). The full machine contract is `baze docs`.
+`skills/baze/SKILL.md` is an agent skill for `baze gen`, `embed`, `rerank`, `guard`, `mcp` and `bot`, released with the CLI so it never describes a flag this version does not have. `baze skill install` puts it into Claude Code and Codex (`baze skill status` shows whether it is current); for another agent, copy the folder into its skills directory. The full machine contract is `baze docs`.
 
 ## Contributing
 
