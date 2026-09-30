@@ -39,6 +39,12 @@ export async function detectHost<T>(
     } catch (error) {
       const status = error instanceof CliError ? error.status : undefined;
       if (status === 401 || status === 403) continue;
+      // A 503 carrying the gateway's own error body is the API-key path's
+      // "this tenant is stopped" answer (middlewares/apikey.py): the host
+      // knows the key but will never serve it. Tenants moved AWS → NCP kept
+      // their keys on both sides, so the usable copy is on the next host.
+      // A bare 503 (no gateway body) is a balancer or a deploy: still stop.
+      if (status === 503 && error instanceof CliError && error.gatewayCode !== undefined) continue;
       if (status === undefined) {
         unreachable.push(host);
         continue;

@@ -168,12 +168,14 @@ async function gatewayRequest(path: string, opts: RequestOpts): Promise<Response
     } catch {
       parsed = undefined;
     }
+    const detail = parsed?.detail;
     throw new CliError(messageFor(res.status, parsed), {
       hint: hintFor(res.status),
       exitCode: res.status === 402 ? 2 : 1,
       status: res.status,
       requestId: requestIdOf(res),
       retryAfterS: res.status === 429 ? retryAfterOf(res) : undefined,
+      gatewayCode: detail && typeof detail === 'object' && typeof detail.code === 'number' ? detail.code : undefined,
     });
   }
   return res;

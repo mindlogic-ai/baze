@@ -34,6 +34,17 @@ test('detectHost throws a written error when every host refuses the key', async 
   );
 });
 
+test("a stopped tenant's 503 (the gateway's own body) moves on: the key's live copy is on the other host", async () => {
+  const tried: string[] = [];
+  const found = await detectHost([HOSTS.aws, HOSTS.ncp], async (host) => {
+    tried.push(host);
+    if (host === HOSTS.aws) throw new CliError('stopped', { status: 503, gatewayCode: 503 });
+    return ['row'];
+  });
+  assert.equal(found.host, HOSTS.ncp);
+  assert.deepEqual(tried, [HOSTS.aws, HOSTS.ncp]);
+});
+
 test('a 5xx stops the probe: the key was delivered, and the next host must not get it too', async () => {
   const tried: string[] = [];
   await assert.rejects(

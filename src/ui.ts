@@ -138,9 +138,22 @@ export class CliError extends Error {
   readonly requestId?: string;
   /** Seconds from a 429's Retry-After header, when the gateway sent one. */
   readonly retryAfterS?: number;
+  /**
+   * The `detail.code` of the gateway's own structured error body. Set only
+   * when the gateway application answered; a bare status from a load
+   * balancer or a proxy in front of it leaves this undefined.
+   */
+  readonly gatewayCode?: number;
   constructor(
     message: string,
-    options: { hint?: string; exitCode?: number; status?: number; requestId?: string; retryAfterS?: number } = {},
+    options: {
+      hint?: string;
+      exitCode?: number;
+      status?: number;
+      requestId?: string;
+      retryAfterS?: number;
+      gatewayCode?: number;
+    } = {},
   ) {
     super(message);
     this.name = 'CliError';
@@ -149,5 +162,6 @@ export class CliError extends Error {
     this.status = options.status;
     this.requestId = options.requestId;
     this.retryAfterS = options.retryAfterS;
+    this.gatewayCode = options.gatewayCode;
   }
 }
