@@ -1,6 +1,6 @@
 # baze
 
-Run Claude Code, Codex and OpenCode through the Baze gateway with one API key, and read models, credits and usage from a shell.
+Run Claude Code, Codex, OpenCode and Hermes Agent through the Baze gateway with one API key, and read models, credits and usage from a shell.
 
 ## Install
 
@@ -42,9 +42,10 @@ printf %s "$KEY" | baze login --with-key --host ncp
 baze claude
 baze codex
 baze opencode
+baze hermes
 ```
 
-Each command starts the tool you already have installed, pointed at the gateway with your key, and exits with the tool's exit code. Nothing is written to disk: the configuration travels as a temporary settings file (Claude Code), `-c` overrides (Codex) or `OPENCODE_CONFIG_CONTENT` (OpenCode), and your own config files stay untouched.
+Each command starts the tool you already have installed, pointed at the gateway with your key, and exits with the tool's exit code. Nothing is written to disk: the configuration travels as a temporary settings file (Claude Code), `-c` overrides (Codex), `OPENCODE_CONFIG_CONTENT` (OpenCode) or environment variables plus `--provider custom` (Hermes), and your own config files stay untouched.
 
 Every argument other than `--model`, `--dry-run` and `--api-base` (Codex: also `--reasoning-effort`) goes to the tool unchanged, `--help` and `--json` included. `baze claude --help` is Claude Code's help; baze's own is `baze help claude`.
 
@@ -52,6 +53,7 @@ Every argument other than `--model`, `--dry-run` and `--api-base` (Codex: also `
 baze claude --model claude-opus-5 -p "fix the failing test"
 baze codex --model gpt-5.6 --reasoning-effort high exec --json "summarize this repo"
 baze opencode --model gemini-3.5-pro run "explain src/"
+baze hermes --model gpt-6-sol -z "summarize this repo"
 baze claude --dry-run          # print the plan, start nothing
 ```
 
@@ -62,8 +64,11 @@ baze claude --dry-run          # print the plan, start nothing
 | Claude Code (`baze claude`) | Anthropic Messages | Claude models only |
 | Codex (`baze codex`) | OpenAI Responses | GPT models only |
 | OpenCode (`baze opencode`) | Anthropic, Responses, Gemini and OpenAI-compatible providers | Every chat model this key can call, each on its native lane |
+| Hermes Agent (`baze hermes`) | OpenAI Chat Completions | Every chat model this key can call, all over Chat Completions |
 
 `baze models` shows the lane of every model. `--model` takes the full id as `baze models` prints it.
+
+Hermes sends a key from the environment only to the host it was issued for, and derives the variable's name from the domain, so `baze hermes` passes your key as `MINDLOGIC_API_KEY` (AWS) or `BAZE_API_KEY` (NCP) together with `CUSTOM_BASE_URL`. A `~/.hermes/.env` that sets either of those wins over the launch; baze warns when it does. There is no `baze setup hermes` yet.
 
 ## Generate images, video, speech and music
 
@@ -124,7 +129,7 @@ Where the key ends up differs by tool:
 | `baze history` | every generation and bot call from this machine |
 | `baze credits` | monthly, purchased and org-granted balances |
 | `baze usage [--from] [--to] [--by model\|key\|day] [--scope key\|member]` | gateway spend, Korea time, at most 92 days |
-| `baze claude \| codex \| opencode [--model ID] [--dry-run]` | run that tool through the gateway |
+| `baze claude \| codex \| opencode \| hermes [--model ID] [--dry-run]` | run that tool through the gateway |
 | `baze setup <tool> [--model ID] [--dry-run]` | write the configuration permanently, with a backup |
 | `baze doctor` | check key, host, Node, tool versions and conflicting config |
 | `baze update` | `npm install -g @mindlogic-ai/baze@latest` |
@@ -140,7 +145,7 @@ Where the key ends up differs by tool:
 | `--no-input` | never prompt; fail instead |
 | `-q`, `--quiet` | drop hints and progress notes |
 
-Launchers do not take the global flags. On `baze claude`, `baze codex` and `baze opencode`, `--json`, `-q` and `--help` belong to the tool.
+Launchers do not take the global flags. On `baze claude`, `baze codex`, `baze opencode` and `baze hermes`, `--json`, `-q` and `--help` belong to the tool.
 
 ## Environment
 

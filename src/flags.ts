@@ -13,7 +13,8 @@ export const GLOBAL: KnownFlags = {
 /**
  * A launcher must be indistinguishable from the tool it wraps: `baze claude
  * --help` is Claude Code's help, `baze codex exec --json` is Codex's JSON
- * mode, `baze opencode run --file x` is OpenCode's file flag. So a launcher
+ * mode, `baze opencode run --file x` is OpenCode's file flag, `baze hermes -z
+ * "..."` is Hermes' one-shot. So a launcher
  * owns three flags and nothing else - not even the globals. `--model` is the
  * one deliberate overlap: baze puts the model into the tool's own config, so
  * consuming it here is how the flag reaches the tool.
@@ -62,6 +63,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, KnownFlags>> = {
   claude: LAUNCHER,
   codex: { ...LAUNCHER, 'reasoning-effort': 'value' },
   opencode: LAUNCHER,
+  hermes: LAUNCHER,
   setup: { ...GLOBAL, model: 'value', 'dry-run': 'boolean' },
   doctor: GLOBAL,
   update: GLOBAL,
@@ -69,7 +71,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, KnownFlags>> = {
 };
 
 /** Commands whose unknown flags belong to the tool they launch. Every other command rejects them. */
-export const PASSTHROUGH_COMMANDS: ReadonlySet<string> = new Set(['claude', 'codex', 'opencode']);
+export const PASSTHROUGH_COMMANDS: ReadonlySet<string> = new Set(['claude', 'codex', 'opencode', 'hermes']);
 
 /**
  * The parser stops at the first flag it does not know and hands the rest on,

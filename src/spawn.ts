@@ -4,11 +4,14 @@ import type { LaunchPlan } from './types.js';
 import { c, info, maskKey, say } from './ui.js';
 
 const SECRET_KEYS = ['ANTHROPIC_AUTH_TOKEN', 'BAZE_API_KEY'];
+// Hermes takes the key under a name derived from the host (MINDLOGIC_API_KEY,
+// BAZE_API_KEY, ...), so any *_API_KEY counts as a secret.
+const isSecret = (k: string): boolean => SECRET_KEYS.includes(k) || k.endsWith('_API_KEY');
 
 export function describePlan(plan: LaunchPlan): string[] {
   const lines: string[] = [];
   for (const [k, v] of Object.entries(plan.env)) {
-    const shown = SECRET_KEYS.includes(k) ? maskKey(v) : v.length > 80 ? `${v.slice(0, 77)}...` : v;
+    const shown = isSecret(k) ? maskKey(v) : v.length > 80 ? `${v.slice(0, 77)}...` : v;
     lines.push(`  ${k}=${shown === '' ? '""' : shown}`);
   }
   // A temp file is gone once the plan is done, so print what it is, not a path to nothing.

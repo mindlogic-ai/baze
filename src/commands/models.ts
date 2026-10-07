@@ -142,7 +142,7 @@ export async function modelsCommand(parsed: Parsed): Promise<number> {
   info('');
   if (type === 'llm') {
     info('Prices are provider list USD per 1M tokens.');
-    info('Claude Code runs Claude-native models only; Codex runs Responses models; OpenCode runs all four lanes.');
+    info('Claude Code runs Claude-native models only; Codex runs Responses models; OpenCode and Hermes run all four lanes.');
   } else {
     if (type === 'embedding' || type === 'rerank' || type === 'decisions') info('Prices are provider list USD per 1M input tokens.');
     info(HOW_TO_RUN[type as Exclude<ModelType, 'llm'>]);

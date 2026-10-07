@@ -103,6 +103,7 @@ export async function doctorCommand(_parsed: Parsed): Promise<number> {
     ['Claude Code', 'claude'],
     ['Codex CLI', 'codex'],
     ['OpenCode', 'opencode'],
+    ['Hermes Agent', 'hermes'],
   ] as const;
   const width = Math.max(...tools.map(([label]) => label.length));
   for (const [label, bin] of tools) {

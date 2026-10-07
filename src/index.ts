@@ -32,7 +32,7 @@ const HELP = `baze - run your coding agent through the Baze gateway. (v${VERSION
   baze history               every generation and bot call, resumable
   baze credits               remaining credit balance
   baze usage                 spend, by model, key or day
-  baze claude | codex | opencode
+  baze claude | codex | opencode | hermes
                              run that tool through the gateway; every flag but
                              --model/--dry-run goes to the tool, nothing is written
   baze setup <tool>          write the configuration permanently, with a backup
@@ -123,8 +123,12 @@ baze bot chat <chatbot id> [--continue]
   Run Codex through the gateway on the Responses API. GPT models only. Every
   other argument, --help and --json included, goes to codex unchanged.`,
   opencode: `baze opencode [--model ID] [--dry-run] [<opencode args>]
-  Run OpenCode with four Baze providers - the only harness that reaches every
-  model. Every other argument, --help included, goes to opencode unchanged.`,
+  Run OpenCode with four Baze providers - every model, each on its native
+  lane. Every other argument, --help included, goes to opencode unchanged.`,
+  hermes: `baze hermes [--model ID] [--dry-run] [<hermes args>]
+  Run Hermes Agent through the gateway's Chat Completions endpoint - every chat
+  model, all lanes. Nothing is written to disk and ~/.hermes is untouched.
+  Every other argument, -z and --help included, goes to hermes unchanged.`,
   setup: `baze setup <claude|codex|opencode> [--model ID] [--dry-run]
   Write the configuration permanently. The old file is backed up first.`,
   doctor: 'baze doctor\n  Check Node, key, host, installed tools and conflicting config. Exits 1 if anything needs fixing.',
@@ -156,6 +160,7 @@ async function dispatch(parsed: Parsed): Promise<number> {
     case 'claude':
     case 'codex':
     case 'opencode':
+    case 'hermes':
       return (await import('./commands/run.js')).runCommand(parsed.command, parsed);
     case 'doctor':
       return (await import('./commands/doctor.js')).doctorCommand(parsed);

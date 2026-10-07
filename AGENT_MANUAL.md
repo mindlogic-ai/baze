@@ -5,13 +5,13 @@ This is `baze` described for a program that drives it: exact invocations, output
 ## Contract
 
 - **stdout is data, stderr is prose.** Every table, hint, warning and progress note goes to stderr. With `--json`, stdout holds exactly one JSON document and nothing else.
-- **Exit codes:** `0` ok · `1` error · `2` out of credit (the gateway answered 402) · `127` the tool to launch is not installed. A launcher (`claude`, `codex`, `opencode`) exits with the tool's own code.
+- **Exit codes:** `0` ok · `1` error · `2` out of credit (the gateway answered 402) · `127` the tool to launch is not installed. A launcher (`claude`, `codex`, `opencode`, `hermes`) exits with the tool's own code.
 - **Unknown options are errors.** Every command but a launcher exits `1` on an option it does not take, instead of ignoring it. Use `--` before an argument that starts with a dash.
 - **Request ids.** When the gateway sends one, a failed call prints `request id: <uuid>` on stderr, and every `--json` result of `gen` and `bot` carries `request_id`. Quote it to support.
 - **`--no-input`** makes every command fail instead of prompting. Use it in unattended runs.
 - **`-q` / `--quiet`** drops hints and progress notes on stderr. Errors still print.
 - **`--json` shapes** are the compatibility contract of this package: a field is only ever added in a minor version; removing or renaming one is a major version.
-- Launchers take none of the global flags. On `baze claude|codex|opencode`, everything but `--model`, `--dry-run` and `--api-base` (Codex: also `--reasoning-effort`) is forwarded to the tool, `--help` and `--json` included.
+- Launchers take none of the global flags. On `baze claude|codex|opencode|hermes`, everything but `--model`, `--dry-run` and `--api-base` (Codex: also `--reasoning-effort`) is forwarded to the tool, `--help` and `--json` included.
 
 ## Credentials
 
@@ -56,7 +56,7 @@ Array of rows:
 ]
 ```
 
-`contextLimit`, `maxOutputTokens` and every pricing rate may be `null`; `audio` rows add `audioClient` (`google` text-to-speech, `google_lyria3` / `elevenlabs` music, `soniox` transcription); `pricing` itself may be `null`. Prices are USD per 1M tokens at list price. The lane decides which harness can run the model: `anthropic` → Claude Code and OpenCode; `responses` → Codex and OpenCode; `gemini` and `compat` → OpenCode only.
+`contextLimit`, `maxOutputTokens` and every pricing rate may be `null`; `audio` rows add `audioClient` (`google` text-to-speech, `google_lyria3` / `elevenlabs` music, `soniox` transcription); `pricing` itself may be `null`. Prices are USD per 1M tokens at list price. The lane decides which harness can run the model: `anthropic` → Claude Code and OpenCode; `responses` → Codex and OpenCode; `gemini` and `compat` → OpenCode only. Hermes runs every lane over Chat Completions.
 
 ## Credits and usage
 
@@ -101,9 +101,10 @@ Dates are Korea time. The window is at most 92 days. Credits are what the server
 baze claude  [--model ID] [--dry-run] [<claude args>]
 baze codex   [--model ID] [--reasoning-effort low|medium|high|max] [--dry-run] [<codex args>]
 baze opencode [--model ID] [--dry-run] [<opencode args>]
+baze hermes  [--model ID] [--dry-run] [<hermes args>]
 ```
 
-`--model` takes a full id and must be on a lane the tool speaks (Claude Code: `anthropic`; Codex: `responses`; OpenCode: any). Nothing is written to disk. `--dry-run` prints the launch plan (binary, arguments, environment with the key masked) to stderr and exits `0` without starting the tool.
+`--model` takes a full id and must be on a lane the tool speaks (Claude Code: `anthropic`; Codex: `responses`; OpenCode and Hermes: any). Nothing is written to disk. `--dry-run` prints the launch plan (binary, arguments, environment with the key masked) to stderr and exits `0` without starting the tool.
 
 Unattended examples:
 
@@ -111,6 +112,7 @@ Unattended examples:
 baze claude -p "run the tests and fix what fails" --output-format json
 baze codex exec --json "summarize the diff"
 baze opencode run "explain src/index.ts"
+baze hermes -z "explain src/index.ts"
 ```
 
 `baze setup <claude|codex|opencode> [--model ID] [--dry-run]` writes the tool's user-level config permanently, backing up the old file. For Claude Code that file holds the key in plain text; the Codex and OpenCode configs name `BAZE_API_KEY` and hold no key. Prefer the launchers in automation.
