@@ -4,6 +4,7 @@ import { FALLBACK_ROWS, pickDefault, type Tool } from '../catalog.js';
 import { apiBase } from '../config.js';
 import { buildClaudePlan, type HarnessOptions } from '../harness/claude.js';
 import { buildCodexPlan } from '../harness/codex.js';
+import { buildHermesPlan } from '../harness/hermes.js';
 import { buildOpencodePlan } from '../harness/opencode.js';
 import { runPlan } from '../spawn.js';
 import type { ModelRow } from '../types.js';
@@ -70,7 +71,9 @@ export async function runCommand(tool: Tool, parsed: Parsed): Promise<number> {
       ? buildClaudePlan(options)
       : tool === 'codex'
         ? buildCodexPlan(options)
-        : buildOpencodePlan(options);
+        : tool === 'hermes'
+          ? buildHermesPlan(options)
+          : buildOpencodePlan(options);
 
   // baze is not in the request path, so it cannot meter per turn (spec §4.6).
   // It reads the balance on both sides of the session and reports the change,

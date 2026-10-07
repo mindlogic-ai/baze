@@ -9,6 +9,7 @@ const COLLISIONS = {
   claude: ['--file', '--help'],
   codex: ['--help', '--json'],
   opencode: ['--file', '--help'],
+  hermes: ['-z', '-m', '--help'],
 } as const;
 
 for (const [tool, flags] of Object.entries(COLLISIONS)) {
@@ -35,7 +36,7 @@ test('a launcher owns --model, --dry-run and --api-base; codex also --reasoning-
 });
 
 test('launchers do not own the global flags: --json, --help and -q belong to the tool', () => {
-  for (const tool of ['claude', 'codex', 'opencode']) {
+  for (const tool of ['claude', 'codex', 'opencode', 'hermes']) {
     const known = knownFor(tool);
     for (const g of Object.keys(GLOBAL)) {
       if (g !== 'api-base') assert.equal(known[g], undefined, `${tool} consumes --${g}`);
@@ -45,7 +46,7 @@ test('launchers do not own the global flags: --json, --help and -q belong to the
 
 test('every other command accepts every global flag', () => {
   for (const [cmd, known] of Object.entries(COMMAND_FLAGS)) {
-    if (cmd === 'claude' || cmd === 'codex' || cmd === 'opencode') continue;
+    if (cmd === 'claude' || cmd === 'codex' || cmd === 'opencode' || cmd === 'hermes') continue;
     for (const g of Object.keys(GLOBAL)) assert.equal(known[g], GLOBAL[g], `${cmd} lacks --${g}`);
   }
 });

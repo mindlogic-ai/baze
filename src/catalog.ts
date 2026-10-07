@@ -1,6 +1,6 @@
 import type { Lane, ModelRow, ModelType } from './types.js';
 
-export type Tool = 'claude' | 'codex' | 'opencode';
+export type Tool = 'claude' | 'codex' | 'opencode' | 'hermes';
 
 const offline = (id: string, lane: Lane): ModelRow => ({ id, type: 'llm', lane, contextLimit: null, pricing: null });
 
@@ -21,12 +21,14 @@ const PREFERRED: Record<Tool, string[]> = {
   claude: ['claude-sonnet-5', 'claude-opus-5', 'claude-sonnet-4-6'],
   codex: ['gpt-5.6-terra', 'gpt-5.5', 'gpt-5.4'],
   opencode: ['claude-sonnet-5', 'gpt-5.6-terra', 'gemini-3.1-pro-preview'],
+  hermes: ['gpt-6.1-sol', 'claude-sonnet-5-5', 'gpt-6-luna'],
 };
 
 const LANE_FOR: Record<Tool, Lane[]> = {
   claude: ['anthropic'],
   codex: ['responses'],
   opencode: ['anthropic', 'responses', 'gemini', 'compat'],
+  hermes: ['anthropic', 'responses', 'gemini', 'compat'],
 };
 
 /** One catalog category. `/models` sends seven; only `llm` is launchable. */

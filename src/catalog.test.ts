@@ -52,7 +52,7 @@ test('offline, an unlisted model gets the lane the server would give it', () => 
 test('the offline fallback gives every tool a default in its own lane', () => {
   // Without this, an unreachable catalog made `baze claude` throw and
   // `baze opencode` emit a model with no provider.
-  for (const tool of ['claude', 'codex', 'opencode'] as const) {
+  for (const tool of ['claude', 'codex', 'opencode', 'hermes'] as const) {
     assert.ok(pickDefault(tool, FALLBACK_ROWS), `${tool} has no fallback default`);
   }
 });

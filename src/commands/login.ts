@@ -77,7 +77,8 @@ export async function loginCommand(parsed: Parsed): Promise<number> {
   info('Next:');
   info('  baze claude     Claude Code through the gateway');
   info('  baze codex      Codex CLI');
-  info('  baze opencode   OpenCode - the only one that reaches every model');
+  info('  baze opencode   OpenCode - every model, each on its native lane');
+  info('  baze hermes     Hermes Agent - every model, over Chat Completions');
   info('  baze models     what this key can call');
   return 0;
 }
