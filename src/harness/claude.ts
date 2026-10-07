@@ -32,25 +32,29 @@ export function claudeEnv(o: Pick<HarnessOptions, 'apiKey' | 'apiBase'>): Record
   };
 }
 
-export function assertClaudeModel(model: string, rows: ModelRow[]): void {
+/**
+ * Any chat model this key can call: the gateway serves a non-Claude model on
+ * /claude by converting the Messages calls to chat completions (server #5152).
+ */
+export function assertClaudeModel(model: string, rows: ModelRow[]): ModelRow {
   const row = chatModels(rows).find((r) => r.id === model);
-  // A typo is not a lane problem; do not send the user to Codex for it.
   if (!row) {
     throw new CliError(`${model} is not available to this key.`, {
-      hint: 'Run `baze models claude` to see the Claude models it can call.',
+      hint: 'Run `baze models` to see the models it can call.',
     });
   }
-  if (row.lane === 'anthropic') return;
-  throw new CliError(`Claude Code cannot run ${model}.`, {
-    hint: 'It always sends the Anthropic-only `thinking` and `cache_control` fields, which other models reject with a 400. Run GPT with `baze codex` and anything else with `baze opencode`.',
-  });
+  return row;
 }
 
 export function buildClaudePlan(o: HarnessOptions): LaunchPlan {
-  // Offline, launchRows adds the pinned model in the lane its family implies,
-  // so the same check refuses a GPT model and admits an unlisted Claude one.
-  if (o.model) assertClaudeModel(o.model, launchRows(o.rows, o.model, o.catalogLive !== false));
+  // Offline, launchRows adds the pinned model, so an unlisted one is not refused.
+  const row = o.model ? assertClaudeModel(o.model, launchRows(o.rows, o.model, o.catalogLive !== false)) : undefined;
   const env = claudeEnv(o);
+  // Claude Code knows only Claude context windows and assumes 200k for any
+  // other model, compacting early (or too late) without this.
+  if (row && row.lane !== 'anthropic' && row.contextLimit) {
+    env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(row.contextLimit);
+  }
   const args: string[] = [];
   let cleanup: (() => void) | undefined;
   const tempFiles: string[] = [];
@@ -82,7 +86,7 @@ export function buildClaudePlan(o: HarnessOptions): LaunchPlan {
     env,
     notes: [
       `Claude Code -> ${env.ANTHROPIC_BASE_URL}${o.model ? ` · model ${o.model}` : ' · Claude Code default model'}`,
-      'The /model picker will list the Claude models this key can call.',
+      'The /model picker lists every chat model this key can call, Claude first.',
     ],
     tempFiles,
     cleanup,

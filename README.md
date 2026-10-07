@@ -59,7 +59,7 @@ baze claude --dry-run          # print the plan, start nothing
 
 | Harness | Protocol the tool speaks | Models it can use through baze |
 |---|---|---|
-| Claude Code (`baze claude`) | Anthropic Messages | Claude models only |
+| Claude Code (`baze claude`) | Anthropic Messages | Every chat model; non-Claude models are converted to chat completions by the gateway |
 | Codex (`baze codex`) | OpenAI Responses | GPT models only |
 | OpenCode (`baze opencode`) | Anthropic, Responses, Gemini and OpenAI-compatible providers | Every chat model this key can call, each on its native lane |
 

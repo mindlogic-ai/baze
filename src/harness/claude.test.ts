@@ -24,9 +24,21 @@ test('ANTHROPIC_API_KEY is present and empty so no saved claude.ai login wins', 
   assert.equal(env.ANTHROPIC_BASE_URL, 'https://a.test/v1/gateway/claude');
 });
 
-test('a non-Claude model is refused with an explanation, not a 400', () => {
-  // The fix is named in the hint, which the error boundary prints under the message.
-  assert.throws(() => assertClaudeModel('gpt-5.6-terra', ROWS), (e: { hint?: string }) => /baze codex/.test(e.hint ?? ''));
+test('a non-Claude model is allowed and gets its real context window', () => {
+  const rows: ModelRow[] = [
+    ...ROWS,
+    { id: 'gpt-6-sol', type: 'llm', lane: 'responses', contextLimit: 1050000, pricing: null },
+  ];
+  const plan = buildClaudePlan({ ...OPTS, rows, model: 'gpt-6-sol' });
+  assert.equal(plan.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '1050000');
+  assert.deepEqual(plan.args.slice(-2), ['--model', 'gpt-6-sol']);
+  plan.cleanup?.();
+});
+
+test('a Claude model leaves the context window to Claude Code', () => {
+  const plan = buildClaudePlan({ ...OPTS, model: 'claude-sonnet-5' });
+  assert.equal(plan.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, undefined);
+  plan.cleanup?.();
 });
 
 test('a model the key does not have is "not available", not "use Codex"', () => {
@@ -36,11 +48,10 @@ test('a model the key does not have is "not available", not "use Codex"', () => 
   );
 });
 
-test('offline, an unlisted Claude model is allowed and a GPT model is still refused', () => {
-  // The fallback lists only a few ids; claude-opus-5 must not be refused for
-  // that, and gpt-5.6-terra must not reach Claude Code and 400 on turn one.
+test('offline, an unlisted model is allowed', () => {
+  // The fallback lists only a few ids; a pinned model must not be refused for that.
   assert.doesNotThrow(() => buildClaudePlan({ ...OPTS, rows: [], catalogLive: false, model: 'claude-opus-5' }).cleanup?.());
-  assert.throws(() => buildClaudePlan({ ...OPTS, rows: [], catalogLive: false, model: 'gpt-5.6-terra' }));
+  assert.doesNotThrow(() => buildClaudePlan({ ...OPTS, rows: [], catalogLive: false, model: 'gpt-6-sol' }).cleanup?.());
 });
 
 test('the plan passes --settings with a file carrying the same env', () => {
