@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conflictingClaudeEnv, contractDrift } from './doctor.js';
+import { conflictingClaudeEnv, contractDrift, NODE_FLOOR, nodeSupported } from './doctor.js';
 
 const OURS = 'https://factchat-cloud.mindlogic.ai/v1/gateway/claude';
 
@@ -37,4 +37,18 @@ test('an older or silent gateway is not drift - a customer on an old server must
   assert.equal(contractDrift(1, 1), undefined);
   assert.equal(contractDrift(0, 1), undefined);
   assert.equal(contractDrift(undefined, 1), undefined);
+});
+
+test('Node 20.10 and newer pass the doctor check', () => {
+  for (const v of ['20.10.0', '20.18.1', '22.0.0', '24.2.0', 'v22.11.0']) assert.equal(nodeSupported(v), true, v);
+});
+
+test('Node older than 20.10 fails the doctor check', () => {
+  for (const v of ['20.9.0', '20.0.0', '18.20.4', '16.0.0']) assert.equal(nodeSupported(v), false, v);
+});
+
+test('the doctor floor matches engines.node in package.json', async () => {
+  const { readFileSync } = await import('node:fs');
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { engines: { node: string } };
+  assert.equal(pkg.engines.node, `>=${NODE_FLOOR}`);
 });

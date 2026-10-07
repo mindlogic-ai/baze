@@ -50,6 +50,16 @@ export function contractDrift(server: number | undefined, ours: number = CLI_CON
   return `The gateway publishes contract ${server}; this baze was built for ${ours}.`;
 }
 
+/** The engines floor from package.json; doctor reports against it every time. */
+export const NODE_FLOOR = '20.10';
+
+/** Pure, so the floor is testable: 20.10.0 passes, 20.9.x and 18.x do not. */
+export function nodeSupported(version: string): boolean {
+  const [major = 0, minor = 0] = version.replace(/^v/, '').split('.').map(Number);
+  const [floorMajor = 0, floorMinor = 0] = NODE_FLOOR.split('.').map(Number);
+  return major > floorMajor || (major === floorMajor && minor >= floorMinor);
+}
+
 function toolVersion(bin: string): string | undefined {
   try {
     // A tool that hangs on --version (a first-run prompt, a broken shim) must not hang doctor.
@@ -69,9 +79,6 @@ function toolVersion(bin: string): string | undefined {
 export async function doctorCommand(_parsed: Parsed): Promise<number> {
   let problems = 0;
   let advice = 0;
-  const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
-  const nodeOk = major > 20 || (major === 20 && minor >= 10);
-
   section('Account');
   const cred = resolveCredential();
   if (!cred.apiKey) {
@@ -166,10 +173,14 @@ export async function doctorCommand(_parsed: Parsed): Promise<number> {
     }
   }
 
-  if (!nodeOk) {
-    say('');
-    section('Runtime');
-    item(mark.fail, `Node.js ${process.versions.node}`, 'baze needs 20.10 or newer');
+  // Always shown: the README says doctor checks Node, and a line that only
+  // appeared on failure read as "not checked" (QA R25, 2026-10-07).
+  say('');
+  section('Runtime');
+  if (nodeSupported(process.versions.node)) {
+    item(mark.ok, `Node.js ${process.versions.node}`, `${NODE_FLOOR} or newer`);
+  } else {
+    item(mark.fail, `Node.js ${process.versions.node}`, `baze needs ${NODE_FLOOR} or newer`);
     problems++;
   }
 
