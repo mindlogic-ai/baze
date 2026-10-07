@@ -103,7 +103,7 @@ baze setup codex
 baze setup opencode
 ```
 
-`setup` rewrites the tool's user-level configuration so a plain `claude`, `codex` or `opencode` uses the gateway. The previous file is backed up first, and the command prints the backup path. `--dry-run` prints the file without writing it.
+`setup` rewrites the tool's user-level configuration so a plain `claude`, `codex` or `opencode` uses the gateway. The previous file is backed up first, and the command prints the backup path. `--dry-run` prints the file without writing it, with the key masked.
 
 Where the key ends up differs by tool:
 

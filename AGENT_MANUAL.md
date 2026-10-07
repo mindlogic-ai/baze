@@ -115,7 +115,7 @@ baze opencode run "explain src/index.ts"
 baze hermes -z "explain src/index.ts"
 ```
 
-`baze setup <claude|codex|opencode> [--model ID] [--dry-run]` writes the tool's user-level config permanently, backing up the old file. For Claude Code that file holds the key in plain text; the Codex and OpenCode configs name `BAZE_API_KEY` and hold no key. Prefer the launchers in automation.
+`baze setup <claude|codex|opencode> [--model ID] [--dry-run]` writes the tool's user-level config permanently, backing up the old file. For Claude Code that file holds the key in plain text; the Codex and OpenCode configs name `BAZE_API_KEY` and hold no key. `--dry-run` prints the would-be file with the key masked (first 6 and last 4 characters) and writes nothing. Prefer the launchers in automation.
 
 ## Lanes
 

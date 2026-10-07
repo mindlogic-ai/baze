@@ -6,13 +6,24 @@ import { pickDefault, type Tool } from '../catalog.js';
 import { apiBase, ENV_KEY_NAME } from '../config.js';
 import { claudeEnv } from '../harness/claude.js';
 import { opencodeConfig } from '../harness/opencode.js';
-import { c, CliError, info, ok, out, say, warn } from '../ui.js';
+import { c, CliError, info, maskKey, ok, out, say, warn } from '../ui.js';
 import { backup, mergeClaudeSettings, readJsonObject, writeText } from '../writers/backup.js';
 import { upsertCodexConfig } from '../writers/codex.js';
 import { claudeSettingsPath, codexConfigPath, opencodeConfigPath } from './doctor.js';
 import { requireApiKey } from './models.js';
 
 const TOOLS: Tool[] = ['claude', 'codex', 'opencode'];
+
+/**
+ * What `--dry-run` prints: the would-be file with the key masked wherever it
+ * appears. The Claude Code settings hold the key in plain text, and a dry run
+ * is what people paste into a ticket or share on screen (QA R25, 2026-10-07).
+ * The real write keeps the real key; Codex and OpenCode configs name the
+ * environment variable instead, but an existing file may still carry it.
+ */
+export function dryRunText(text: string, apiKey: string): string {
+  return apiKey ? text.split(apiKey).join(maskKey(apiKey)) : text;
+}
 
 export async function setupCommand(parsed: Parsed): Promise<number> {
   const tool = parsed.positionals[0] as Tool | undefined;
@@ -37,7 +48,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
     const next = mergeClaudeSettings(readJsonObject(path), claudeEnv({ apiKey, apiBase: base }));
     const text = `${JSON.stringify(next, null, 2)}\n`;
     if (dryRun) {
-      out(text);
+      out(dryRunText(text, apiKey));
       return 0;
     }
     const bak = backup(path);
@@ -53,7 +64,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
     const current = existsSync(path) ? readFileSync(path, 'utf8') : '';
     const text = upsertCodexConfig(current, { model, apiBase: base });
     if (dryRun) {
-      out(text);
+      out(dryRunText(text, apiKey));
       return 0;
     }
     const bak = backup(path);
@@ -90,7 +101,7 @@ export async function setupCommand(parsed: Parsed): Promise<number> {
   };
   const text = `${JSON.stringify(next, null, 2)}\n`;
   if (dryRun) {
-    out(text);
+    out(dryRunText(text, apiKey));
     return 0;
   }
   const bak = backup(path);
