@@ -21,9 +21,7 @@ const PREFERRED: Record<Tool, string[]> = {
   claude: ['claude-sonnet-5', 'claude-opus-5', 'claude-sonnet-4-6'],
   codex: ['gpt-5.6-terra', 'gpt-5.5', 'gpt-5.4'],
   opencode: ['claude-sonnet-5', 'gpt-5.6-terra', 'gemini-3.1-pro-preview'],
-  // Hermes sends every model over Chat Completions, where Claude loses prompt
-  // caching; so a GPT model leads and Claude is the last resort.
-  hermes: ['gpt-5.6-terra', 'gemini-3.1-pro-preview', 'claude-sonnet-5'],
+  hermes: ['gpt-6.1-sol', 'claude-sonnet-5-5', 'gpt-6-luna'],
 };
 
 const LANE_FOR: Record<Tool, Lane[]> = {

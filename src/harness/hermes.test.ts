@@ -75,6 +75,9 @@ test('warns when ~/.hermes/.env would override the launch', () => {
   assert.equal(buildHermesPlan(OPTS).notes.length, 2);
 });
 
-test('the default model is not Claude, which loses prompt caching on Chat Completions', () => {
-  assert.equal(pickDefault('hermes', [...ROWS, { id: 'gpt-5.6-terra', type: 'llm', lane: 'responses', contextLimit: null, pricing: null }]), 'gpt-5.6-terra');
+test('the default model follows the preference order gpt-6.1-sol, claude-sonnet-5-5, gpt-6-luna', () => {
+  const r = (id: string, lane: 'responses' | 'anthropic') => ({ id, type: 'llm' as const, lane, contextLimit: null, pricing: null });
+  assert.equal(pickDefault('hermes', [...ROWS, r('gpt-6-luna', 'responses'), r('claude-sonnet-5-5', 'anthropic'), r('gpt-6.1-sol', 'responses')]), 'gpt-6.1-sol');
+  assert.equal(pickDefault('hermes', [...ROWS, r('gpt-6-luna', 'responses'), r('claude-sonnet-5-5', 'anthropic')]), 'claude-sonnet-5-5');
+  assert.equal(pickDefault('hermes', [...ROWS, r('gpt-6-luna', 'responses')]), 'gpt-6-luna');
 });
