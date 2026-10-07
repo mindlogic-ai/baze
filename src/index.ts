@@ -117,8 +117,8 @@ baze bot chat <chatbot id> [--continue]
   Gateway spend. --scope key (default) is the key in use; member is every key you own,
   and --by key implies it. Dates are Korea time; the default window is this month; at most 92 days.`,
   claude: `baze claude [--model ID] [--dry-run] [<claude args>]
-  Run Claude Code through the gateway. Claude models only. Nothing is written to
-  disk. Every other argument, --help included, goes to claude unchanged.`,
+  Run Claude Code through the gateway. Claude by default; --model takes any chat
+  model (GPT, Gemini, ...). Nothing is written to disk. Every other argument, --help included, goes to claude unchanged.`,
   codex: `baze codex [--model ID] [--reasoning-effort low|medium|high|max] [--dry-run] [<codex args>]
   Run Codex through the gateway on the Responses API. GPT models only. Every
   other argument, --help and --json included, goes to codex unchanged.`,
