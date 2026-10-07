@@ -275,3 +275,34 @@ test('--seconds on a Lyria model is refused before anything is paid for', async 
     gw.restore();
   }
 });
+
+function pcmReply(headers: Record<string, string> = {}): Response {
+  return new Response(new Uint8Array(480), { headers: { 'content-type': 'audio/pcm', ...headers } });
+}
+
+test('speech from a legacy-mode organization is billed with no amount: history keeps null, not a guess', async () => {
+  const readHistory = await freshHome('https://tts.test');
+  const gw = stubGateway(() => pcmReply({ 'x-input-tokens': '3', 'x-output-tokens': '25' }));
+  try {
+    assert.equal(await genCommand(parse('speech', 'hello', '--model', 'gemini-tts', '-o', 'a.wav', '--json')), 0);
+    const [entry] = readHistory();
+    assert.equal(entry!.status, 'completed');
+    assert.equal(entry!.credits, null);
+  } finally {
+    gw.restore();
+  }
+});
+
+test('speech records the charge from X-Credits-Charged or the X-Billing block', async () => {
+  const replies: Record<string, string>[] = [{ 'x-credits-charged': '1.08' }, { 'x-billing': JSON.stringify({ deducted_credit: 1.08 }) }];
+  for (const headers of replies) {
+    const readHistory = await freshHome('https://tts.test');
+    const gw = stubGateway(() => pcmReply(headers));
+    try {
+      assert.equal(await genCommand(parse('speech', 'hello', '--model', 'gemini-tts', '-o', 'a.wav', '--json')), 0);
+      assert.equal(readHistory()[0]!.credits, 1.08);
+    } finally {
+      gw.restore();
+    }
+  }
+});

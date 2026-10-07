@@ -1,7 +1,8 @@
 import { relative } from 'node:path';
 import type { Parsed } from '../args.js';
 import { historyPath, readHistory } from '../history.js';
-import { CliError, cOut, fit, formatCredits, info, out, say, shortPath, termWidth } from '../ui.js';
+import { historyCreditsCell } from '../charge.js';
+import { CliError, cOut, fit, info, out, say, shortPath, termWidth } from '../ui.js';
 
 const STATUS_GLYPH: Record<string, string> = { completed: '✔', failed: '✘', processing: '◷', submitted: '◷' };
 const STATUS_MARK: Record<string, (s: string) => string> = {
@@ -59,7 +60,7 @@ export async function historyCommand(parsed: Parsed): Promise<number> {
   // padded, credits sit right-aligned, and paths are shortened - a full temp
   // path pushed every line past 150 characters (feedback, 2026-09-28).
   const modelWidth = Math.min(28, Math.max(...rows.map((e) => e.model.length)));
-  const credits = rows.map((e) => (typeof e.credits === 'number' ? `${formatCredits(e.credits)} cr` : '-'));
+  const credits = rows.map(historyCreditsCell);
   const creditWidth = Math.max(...credits.map((s) => s.length));
   rows.forEach((e, i) => {
     const glyph = (STATUS_MARK[e.status] ?? cOut.dim)(STATUS_GLYPH[e.status] ?? '?');
@@ -76,6 +77,7 @@ export async function historyCommand(parsed: Parsed): Promise<number> {
     out(`${head}${cOut.dim(fitPath(what, room))}`);
   });
   info('');
+  if (credits.includes('billed')) info('"billed": the gateway charged the call but did not report the amount; `baze usage` has it.');
   info(`Resume an unfinished job with \`baze gen wait <id>\`. Full records: --json  (${historyPath()})`);
   return 0;
 }

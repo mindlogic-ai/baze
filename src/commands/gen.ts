@@ -19,7 +19,7 @@ import {
   pcmToWav,
   writeResult,
 } from '../media.js';
-import { type ChargeReply, chargedCredits, chargedFromHeaders } from '../charge.js';
+import { type ChargeReply, chargedCredits, chargedFromHeaders, chargeNote } from '../charge.js';
 import { checkCount, checkParams, describeParams, type ParamSpec, parseSets } from '../params.js';
 import { c, CliError, formatCredits, info, out, say } from '../ui.js';
 import { requireApiKey } from './models.js';
@@ -235,8 +235,7 @@ function finish(ctx: Ctx, result: Result): number {
   }
   if (result.text !== undefined && result.files.length === 0) out(result.text);
   for (const file of result.files) out(file);
-  const credits = result.credits != null ? `${formatCredits(result.credits)} credits · ` : '';
-  info(c.dim(`${credits}history ${result.historyId}${result.requestId ? ` · request ${result.requestId}` : ''}`));
+  info(c.dim(`${chargeNote(result.credits)} · history ${result.historyId}${result.requestId ? ` · request ${result.requestId}` : ''}`));
   return 0;
 }
 

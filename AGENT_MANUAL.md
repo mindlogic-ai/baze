@@ -154,7 +154,7 @@ Result:
   "files": [ "/absolute/path/of/each/result" ],
   "operation_id": "…",            // video, transcribe, async image
   "text": "…",                    // transcribe only; also "segments": [ … ]
-  "credits": 40 | null,           // what the call deducted; null only from a server that does not report it (a failed video: refunded)
+  "credits": 40 | null,           // what the call deducted; null when the gateway did not report it (today: speech for a legacy-mode organization; the call is still billed, `baze usage` has the amount) or a failed video (refunded)
   "request_id": "…" | null
 }
 ```
@@ -195,7 +195,7 @@ The chatbot runs as it does in the studio: its prompt, knowledge, workflow and t
 baze history [--last N] [--kind image|video|speech|music|transcribe|bot] --json
 ```
 
-Newest first, one object per call: `{ "id", "at", "kind", "model", "status": "submitted" | "processing" | "completed" | "failed", "host", "prompt"?, "operation_id"?, "files"?, "credits"?, "request_id"?, "error"? }`. Kept on this machine only, in `~/.baze/history.jsonl` (0600); prompts are cut at 500 characters.
+Newest first, one object per call: `{ "id", "at", "kind", "model", "status": "submitted" | "processing" | "completed" | "failed", "host", "prompt"?, "operation_id"?, "files"?, "credits"?, "request_id"?, "error"? }`. In the table a completed call whose charge was not reported shows `billed`, not an amount. Kept on this machine only, in `~/.baze/history.jsonl` (0600); prompts are cut at 500 characters.
 
 ## MCP suites
 

@@ -37,3 +37,19 @@ export function chargedFromHeaders(headers: Headers): number | null {
 export function billedLine(what: string, credits: number | null): string {
   return credits === null ? `${what} billed` : `${what} billed, ${formatCredits(credits)} credits`;
 }
+
+/**
+ * The cost part of a result line. A completed call the gateway did not price
+ * was still billed: speech for a legacy-mode organization carries no charge
+ * at all today, and "-" read as "free" (QA R25, 2026-10-07). The CLI never
+ * computes the amount, so it says where the server-side figure is.
+ */
+export function chargeNote(credits: number | null | undefined): string {
+  return typeof credits === 'number' ? `${formatCredits(credits)} credits` : 'billed, amount not reported (see `baze usage`)';
+}
+
+/** The credits column of `baze history`: the amount, "billed" when unreported, "-" when nothing was kept. */
+export function historyCreditsCell(entry: { status: string; credits?: number | null }): string {
+  if (typeof entry.credits === 'number') return `${formatCredits(entry.credits)} cr`;
+  return entry.status === 'completed' ? 'billed' : '-';
+}
