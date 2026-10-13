@@ -1,6 +1,8 @@
 # baze
 
-Run Claude Code, Codex, OpenCode and Hermes Agent through the Baze gateway with one API key, and read models, credits and usage from a shell.
+Run Claude Code, Codex, OpenCode and Hermes Agent through the [Baze](https://baze.co) API gateway with one API key; generate images, video, speech and music; ask your organization's studio chatbots; and read models, credits and usage from a shell.
+
+Gateway documentation: [docs.mindlogic.ai](https://docs.mindlogic.ai/docs/baze/api-gateway/getting-started/overview) (AWS) · [docs.factchat.kr](https://docs.factchat.kr/docs/baze/api-gateway/getting-started/overview) (NCP).
 
 ## Install
 
@@ -25,7 +27,7 @@ Node 20.10 or newer. No runtime dependencies.
 baze login
 ```
 
-Paste the key from your Baze API keys page. Echo is off. The key names the Baze it belongs to, so AWS and NCP users run the same command; it is checked against the server before it is saved to `~/.baze/credentials.json` (mode 0600).
+Paste an API key issued in your Baze console ([how to get one](https://docs.mindlogic.ai/docs/baze/api-gateway/getting-started/authentication)). Echo is off. Baze runs as two separate deployments, AWS (`factchat-cloud.mindlogic.ai`) and NCP (`api.baze.co`), and the key names the one it belongs to, so everyone runs the same command; it is checked against the server before it is saved to `~/.baze/credentials.json` (mode 0600).
 
 For CI, containers, or an older key that does not name its deployment, pipe the key and say which Baze it belongs to:
 

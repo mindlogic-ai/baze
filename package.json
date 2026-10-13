@@ -2,6 +2,25 @@
   "name": "@mindlogic-ai/baze",
   "version": "0.1.0",
   "description": "Run Claude Code, Codex, OpenCode and Hermes Agent through the Baze gateway; generate images, video and audio, call studio chatbots, and read models, credits and usage from a shell.",
+  "keywords": [
+    "baze",
+    "cli",
+    "ai-gateway",
+    "claude-code",
+    "codex",
+    "opencode",
+    "hermes",
+    "llm"
+  ],
+  "homepage": "https://github.com/mindlogic-ai/baze#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mindlogic-ai/baze.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mindlogic-ai/baze/issues"
+  },
+  "author": "MindLogic",
   "license": "Apache-2.0",
   "type": "module",
   "bin": {

@@ -19,7 +19,7 @@ interface GatewayErrorBody {
   error?: { message?: string };
   /**
    * FastAPI's `detail`. This gateway sends an OBJECT - `raise_api_error` builds
-   * `{"code": 4001, "message": "..."}` (factchat/v1/errors.py) - while other
+   * `{"code": 4001, "message": "..."}` - while other
    * routes on the same host still send a plain string. Reading it as a string
    * printed "[object Object]" for every gateway error.
    */
