@@ -2,7 +2,7 @@
   "name": "@mindlogic-ai/baze",
   "version": "0.1.0",
   "description": "Run Claude Code, Codex, OpenCode and Hermes Agent through the Baze gateway; generate images, video and audio, call studio chatbots, and read models, credits and usage from a shell.",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "baze": "./dist/index.js"

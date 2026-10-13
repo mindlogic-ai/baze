@@ -51,8 +51,8 @@ Every argument other than `--model`, `--dry-run` and `--api-base` (Codex: also `
 
 ```bash
 baze claude --model claude-opus-5 -p "fix the failing test"
-baze codex --model gpt-5.6 --reasoning-effort high exec --json "summarize this repo"
-baze opencode --model gemini-3.5-pro run "explain src/"
+baze codex --model gpt-5.6-terra --reasoning-effort high exec --json "summarize this repo"
+baze opencode --model gemini-3.1-pro-preview run "explain src/"
 baze hermes --model gpt-6-sol -z "summarize this repo"
 baze claude --dry-run          # print the plan, start nothing
 ```
@@ -180,3 +180,7 @@ npm run build       # dist/index.js with the version stamped in
 ```
 
 Releases are a `v*` tag on `main`; `.github/workflows/release.yml` publishes to npm with provenance through Trusted Publishing. Adding a model to the gateway never needs a release: the CLI reads the catalog at run time.
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE). The license covers this code, not the Baze name or marks.
