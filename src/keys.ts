@@ -7,7 +7,7 @@ export const HOSTS = {
 
 const HOST_FOR_TAG: Record<string, string | undefined> = { aws: HOSTS.aws, ncp: HOSTS.ncp };
 
-// Key format: see Global Constraints. The server side is factchat/utils/auth.py.
+// Key format: `baze_` + 32 base62 characters + a 6-character checksum that names the deployment.
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const TAGGED = /^(baze_[0-9A-Za-z]{32})([0-9A-Za-z]{6})$/;
 const DEPLOYMENTS = ['aws', 'ncp', 'opm'] as const;

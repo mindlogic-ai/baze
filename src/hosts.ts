@@ -17,7 +17,7 @@ export function hostOrder(preferred: string | undefined): string[] {
 /**
  * Only for old untagged keys: a tagged key names its own deployment. A
  * Baze key belongs to exactly one deployment, and NCP tenants have called
- * AWS by mistake (C13).
+ * AWS by mistake.
  *
  * The probe moves to the next host only when the answer proves the key is not
  * this host's (401/403), or when no connection was made, so no key was sent.

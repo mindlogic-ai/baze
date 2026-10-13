@@ -34,7 +34,7 @@ export function claudeEnv(o: Pick<HarnessOptions, 'apiKey' | 'apiBase'>): Record
 
 /**
  * Any chat model this key can call: the gateway serves a non-Claude model on
- * /claude by converting the Messages calls to chat completions (server #5152).
+ * /claude by converting the Messages calls to chat completions.
  */
 export function assertClaudeModel(model: string, rows: ModelRow[]): ModelRow {
   const row = chatModels(rows).find((r) => r.id === model);
