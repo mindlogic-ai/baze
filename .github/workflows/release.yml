@@ -1,3 +1,4 @@
+# Publishes to npm when a v* tag is pushed. Bump package.json version first.
 name: release
 
 on:
